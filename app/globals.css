@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --paper: #faf9f6;
+  --surface: #ffffff;
+  --ink: #14151a;
+  --ink-soft: #6b6d76;
+  --ink-mute: #93949c;
+  --border: #e8e6e0;
+  --active: #f2f0ea;
+  --accent: #a9713a;
+  --accent-soft: #f4ebdd;
+  --accent-ink: #ffffff;
+  --positive: #12805c;
+  --negative: #b3261e;
+
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+.dark {
+  --paper: #101014;
+  --surface: #16161b;
+  --ink: #f2f1ec;
+  --ink-soft: #a7a7b0;
+  --ink-mute: #7a7a83;
+  --border: #26262d;
+  --active: #1e1e24;
+  --accent: #cd9a5c;
+  --accent-soft: #2a2318;
+  --accent-ink: #101014;
+  --positive: #3fbf8f;
+  --negative: #e5695d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+/* Visible keyboard focus everywhere — never suppressed */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
