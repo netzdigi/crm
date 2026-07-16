@@ -3,29 +3,78 @@
 import * as React from "react"
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSignIn } from "@clerk/nextjs/legacy";
 
 import {LogIn, Lock, Mail} from "lucide-react";
 
+type OAuthProvider = "oauth_google" | "oauth_facebook" | "oauth_apple";
+
 const SignIn2 = () => {
+  const router = useRouter();
+  const { isLoaded, signIn, setActive } = useSignIn();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<OAuthProvider | null>(null);
 
   const validateEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
     if (!email || !password) {
-      setError("Please enter both email and password.");
+      setError("Моля, въведи имейл и парола.");
       return;
     }
     if (!validateEmail(email)) {
-      setError("Please enter a valid email address.");
+      setError("Моля, въведи валиден имейл адрес.");
       return;
     }
+    if (!isLoaded) return;
+
     setError("");
-    alert("Sign in successful! (Demo)");
+    setSubmitting(true);
+    try {
+      const result = await signIn.create({
+        identifier: email,
+        password,
+      });
+
+      if (result.status === "complete") {
+        await setActive({ session: result.createdSessionId });
+        router.push("/");
+      } else {
+        setError("Входът изисква допълнителна стъпка. Провери имейла си.");
+      }
+    } catch (err: any) {
+      setError(
+        err?.errors?.[0]?.message ??
+          "Неуспешен вход. Провери въведените данни и опитай отново."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleOAuthSignIn = async (strategy: OAuthProvider) => {
+    if (!isLoaded) return;
+    setError("");
+    setOauthLoading(strategy);
+    try {
+      await signIn.authenticateWithRedirect({
+        strategy,
+        redirectUrl: "/sso-callback",
+        redirectUrlComplete: "/",
+      });
+    } catch (err: any) {
+      setOauthLoading(null);
+      setError(
+        err?.errors?.[0]?.message ?? "Входът не бе успешен. Опитай отново."
+      );
+    }
   };
 
   return (
@@ -35,10 +84,10 @@ const SignIn2 = () => {
           <LogIn className="w-7 h-7 text-black" />
         </div>
         <h2 className="text-2xl font-semibold mb-2 text-center">
-          Sign in with email
+          Вход с имейл
         </h2>
         <p className="text-gray-500 text-sm mb-6 text-center">
-          Make a new doc to bring your words, data, and teams together. For free
+          Влез в акаунта си, за да управляваш бизнеса си от едно място.
         </p>
         <div className="w-full flex flex-col gap-3 mb-2">
           <div className="relative">
@@ -46,7 +95,7 @@ const SignIn2 = () => {
               <Mail className="w-4 h-4" />
             </span>
             <input
-              placeholder="Email"
+              placeholder="Имейл"
               type="email"
               value={email}
               className="w-full pl-10 pr-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-gray-50 text-black text-sm"
@@ -58,7 +107,7 @@ const SignIn2 = () => {
               <Lock className="w-4 h-4" />
             </span>
             <input
-              placeholder="Password"
+              placeholder="Парола"
               type="password"
               value={password}
               className="w-full pl-10 pr-10 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-200 bg-gray-50 text-black text-sm"
@@ -71,37 +120,56 @@ const SignIn2 = () => {
             <div className="text-sm text-red-500 text-left">{error}</div>
           )}
             <button className="text-xs  hover:underline font-medium">
-              Forgot password?
+              Забравена парола?
             </button>
           </div>
         </div>
         <button
           onClick={handleSignIn}
-          className="w-full bg-gradient-to-b from-gray-700 to-gray-900 text-white font-medium py-2 rounded-xl shadow hover:brightness-105 cursor-pointer transition mb-4 mt-2"
+          disabled={submitting || !isLoaded}
+          className="w-full bg-gradient-to-b from-gray-700 to-gray-900 text-white font-medium py-2 rounded-xl shadow hover:brightness-105 cursor-pointer transition mb-4 mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Get Started
+          {submitting ? "Вход…" : "Вход"}
         </button>
         <div className="flex items-center w-full my-2">
           <div className="flex-grow border-t border-dashed border-gray-200"></div>
-          <span className="mx-2 text-xs text-gray-400">Or sign in with</span>
+          <span className="mx-2 text-xs text-gray-400">Или влез с</span>
           <div className="flex-grow border-t border-dashed border-gray-200"></div>
         </div>
         <div className="flex gap-3 w-full justify-center mt-2">
-          <button className="flex items-center justify-center w-12 h-12 rounded-xl border bg-white hover:bg-gray-100 transition grow">
+          <button
+            type="button"
+            onClick={() => handleOAuthSignIn("oauth_google")}
+            disabled={!isLoaded || oauthLoading !== null}
+            aria-label="Влез с Google"
+            className="flex items-center justify-center w-12 h-12 rounded-xl border bg-white hover:bg-gray-100 transition grow disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+          >
             <img
               src="https://www.svgrepo.com/show/475656/google-color.svg"
               alt="Google"
               className="w-6 h-6"
             />
           </button>
-          <button className="flex items-center justify-center w-12 h-12 rounded-xl border bg-white hover:bg-gray-100 transition grow">
+          <button
+            type="button"
+            onClick={() => handleOAuthSignIn("oauth_facebook")}
+            disabled={!isLoaded || oauthLoading !== null}
+            aria-label="Влез с Facebook"
+            className="flex items-center justify-center w-12 h-12 rounded-xl border bg-white hover:bg-gray-100 transition grow disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+          >
             <img
               src="https://www.svgrepo.com/show/448224/facebook.svg"
               alt="Facebook"
               className="w-6 h-6"
             />
           </button>
-          <button className="flex items-center justify-center w-12 h-12 rounded-xl border bg-white hover:bg-gray-100 transition grow">
+          <button
+            type="button"
+            onClick={() => handleOAuthSignIn("oauth_apple")}
+            disabled={!isLoaded || oauthLoading !== null}
+            aria-label="Влез с Apple"
+            className="flex items-center justify-center w-12 h-12 rounded-xl border bg-white hover:bg-gray-100 transition grow disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+          >
             <img
               src="https://www.svgrepo.com/show/511330/apple-173.svg"
               alt="Apple"
