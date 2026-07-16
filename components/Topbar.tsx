@@ -1,7 +1,15 @@
+"use client";
+
+import { usePathname } from "next/navigation";
 import { LayoutGrid, Search, Bell, Menu } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
+import { navItems } from "./SidebarNav";
 
 export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
+  const pathname = usePathname();
+  const current = navItems.find((item) => item.href === pathname) ?? navItems[0];
+  const CrumbIcon = current.icon;
+
   return (
     <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-border bg-surface px-4 sm:px-5">
       <div className="flex items-center gap-3 text-[13.5px] font-semibold text-ink">
@@ -14,8 +22,8 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
           <Menu size={17} />
         </button>
         <div className="flex items-center gap-2">
-          <LayoutGrid size={15} strokeWidth={2} className="hidden text-ink-soft sm:block" />
-          <span>Табло</span>
+          <CrumbIcon size={15} strokeWidth={2} className="hidden text-ink-soft sm:block" />
+          <span>{current.label}</span>
         </div>
       </div>
 

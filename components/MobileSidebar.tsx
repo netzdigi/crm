@@ -39,7 +39,7 @@ export function MobileSidebar({
             >
               <X size={15} />
             </button>
-            <SidebarNav />
+            <SidebarNav onNavigate={onClose} />
           </motion.aside>
         </>
       )}

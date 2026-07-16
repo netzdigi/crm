@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   LayoutGrid,
   BarChart3,
@@ -19,47 +20,51 @@ const navGroups = [
   {
     label: "Продукт",
     items: [
-      { icon: LayoutGrid, label: "Табло" },
-      { icon: BarChart3, label: "Анализи" },
-      { icon: ClipboardList, label: "Задачи и процеси" },
+      { icon: LayoutGrid, label: "Табло", href: "/" },
+      { icon: BarChart3, label: "Анализи", href: "/analytics" },
+      { icon: ClipboardList, label: "Задачи и процеси", href: "/tasks" },
     ],
   },
   {
     label: "Работно пространство",
     items: [
-      { icon: Users, label: "Клиенти и комуникация" },
-      { icon: Globe, label: "Интеграции" },
-      { icon: KeyRound, label: "API ключове" },
+      { icon: Users, label: "Клиенти и комуникация", href: "/clients" },
+      { icon: Globe, label: "Интеграции", href: "/integrations" },
+      { icon: KeyRound, label: "API ключове", href: "/api-keys" },
     ],
   },
   {
     label: "Управление",
     items: [
-      { icon: Settings, label: "Настройки" },
-      { icon: CreditCard, label: "Фактуриране" },
+      { icon: Settings, label: "Настройки", href: "/settings" },
+      { icon: CreditCard, label: "Фактуриране", href: "/billing" },
     ],
   },
 ];
 
+export const navItems = navGroups.flatMap((group) => group.items);
+
 export function SidebarNav({
   collapsed = false,
   footerExtra,
+  onNavigate,
 }: {
   collapsed?: boolean;
   footerExtra?: React.ReactNode;
+  onNavigate?: () => void;
 }) {
-  const [active, setActive] = useState("Табло");
+  const pathname = usePathname();
 
   return (
     <>
-      <div className="flex items-center gap-2 px-1 pb-5 pt-1">
+      <Link href="/" className="flex items-center gap-2 px-1 pb-5 pt-1" onClick={onNavigate}>
         <LogoMark />
         {!collapsed && (
           <span className="font-display text-[15px] font-semibold tracking-tight">
             Vista
           </span>
         )}
-      </div>
+      </Link>
 
       <nav className="flex flex-1 flex-col gap-4 overflow-hidden">
         {navGroups.map((group) => (
@@ -71,12 +76,12 @@ export function SidebarNav({
             )}
             <ul className="flex flex-col gap-[2px]">
               {group.items.map((item) => {
-                const isActive = active === item.label;
+                const isActive = pathname === item.href;
                 return (
                   <li key={item.label}>
-                    <button
-                      type="button"
-                      onClick={() => setActive(item.label)}
+                    <Link
+                      href={item.href}
+                      onClick={onNavigate}
                       title={collapsed ? item.label : undefined}
                       className={`flex w-full items-center gap-2.5 rounded-[7px] px-2 py-[7px] text-[13px] font-medium transition-colors duration-150 cursor-pointer ${
                         isActive
@@ -90,7 +95,7 @@ export function SidebarNav({
                         className={isActive ? "text-accent" : ""}
                       />
                       {!collapsed && <span className="truncate">{item.label}</span>}
-                    </button>
+                    </Link>
                   </li>
                 );
               })}
