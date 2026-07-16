@@ -14,7 +14,7 @@ export function ThemeToggle() {
     const next = !isDark;
     setIsDark(next);
     document.documentElement.classList.toggle("dark", next);
-    localStorage.setItem("vezna-theme", next ? "dark" : "light");
+    localStorage.setItem("vista-theme", next ? "dark" : "light");
   }
 
   return (
