@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { LayoutGrid, Search, Bell, Menu } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
+import { UserMenu } from "./UserMenu";
 import { navItems } from "./SidebarNav";
 
 export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
@@ -43,9 +44,7 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
           <Bell size={15} />
         </button>
         <ThemeToggle />
-        <div className="ml-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-ink text-[12px] font-semibold text-surface dark:bg-accent dark:text-accent-ink">
-          М
-        </div>
+        <UserMenu />
       </div>
     </header>
   );
