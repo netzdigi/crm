@@ -11,14 +11,14 @@ export function LogoMark({ size = 20 }: { size?: number }) {
         fill="none"
       >
         <path
-          d="M12 3v18M12 7 5 9.5 12 12l7-2.5L12 7Z"
+          d="M4 16.5h16M8 16.5a4 4 0 0 1 8 0"
           stroke="var(--surface)"
           strokeWidth="1.6"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
         <path
-          d="M5 9.5c0 2-1.2 3.4-1.2 3.4S5 14.2 6.5 12.4M19 9.5c0 2 1.2 3.4 1.2 3.4S17.5 14.2 16 12.4"
+          d="M12 7.5v2M8.6 9l1.1 1.1M15.4 9l-1.1 1.1"
           stroke="var(--surface)"
           strokeWidth="1.3"
           strokeLinecap="round"

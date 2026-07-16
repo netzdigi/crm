@@ -18,7 +18,7 @@ export const statMetrics: StatMetric[] = [
   },
   {
     label: "Приходи",
-    value: "18 290 лв.",
+    value: "9 352 €",
     trendLabel: "12,4% спрямо миналата седмица",
     trend: "up",
     sparkline: "M2,28 C12,26 20,18 30,20 C40,22 46,12 56,10 C66,8 74,16 82,10 C88,6 94,4 98,2",
@@ -40,13 +40,13 @@ export const statMetrics: StatMetric[] = [
 ];
 
 export const weeklyRevenue = [
-  { day: "Пон", amount: "1 240 лв.", heightPct: 52 },
-  { day: "Вт", amount: "1 080 лв.", heightPct: 46 },
-  { day: "Ср", amount: "1 520 лв.", heightPct: 66 },
-  { day: "Чет", amount: "1 610 лв.", heightPct: 70 },
-  { day: "Пет", amount: "1 890 лв.", heightPct: 82 },
-  { day: "Съб", amount: "1 470 лв.", heightPct: 64 },
-  { day: "Нед", amount: "2 300 лв.", heightPct: 100 },
+  { day: "Пон", amount: "634 €", heightPct: 52 },
+  { day: "Вт", amount: "552 €", heightPct: 46 },
+  { day: "Ср", amount: "777 €", heightPct: 66 },
+  { day: "Чет", amount: "823 €", heightPct: 70 },
+  { day: "Пет", amount: "966 €", heightPct: 82 },
+  { day: "Съб", amount: "752 €", heightPct: 64 },
+  { day: "Нед", amount: "1 176 €", heightPct: 100 },
 ];
 
 export const channelDateLabels = [
@@ -60,9 +60,9 @@ export const channelDateLabels = [
 ];
 
 export const invoices = [
-  { client: "Северен вятър ЕООД", number: "#1045", amount: "2 400,00 лв." },
-  { client: "Синева ООД", number: "#1044", amount: "890,00 лв." },
-  { client: "Дъбрава Студио", number: "#1043", amount: "5 120,00 лв." },
+  { client: "Северен вятър ЕООД", number: "#1045", amount: "1 227,10 €" },
+  { client: "Синева ООД", number: "#1044", amount: "455,05 €" },
+  { client: "Дъбрава Студио", number: "#1043", amount: "2 617,81 €" },
 ];
 
 export const activity = [

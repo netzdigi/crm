@@ -56,7 +56,7 @@ export function SidebarNav({
         <LogoMark />
         {!collapsed && (
           <span className="font-display text-[15px] font-semibold tracking-tight">
-            Везна
+            Vista
           </span>
         )}
       </div>
@@ -126,7 +126,7 @@ export function SidebarNav({
               </div>
             </div>
             <div className="px-2 pt-2 text-[11px] text-ink-mute">
-              © 2026 Везна ООД
+              © 2026 Vista ООД
             </div>
           </>
         )}

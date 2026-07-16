@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Везна — Табло за управление на бизнеса",
+  title: "Vista — Табло за управление на бизнеса",
   description:
     "Прецизна система за фактуриране, клиенти и анализи за бизнеси, които не правят компромис с детайла.",
 };
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 const THEME_INIT = `
 (function () {
   try {
-    var stored = localStorage.getItem('vezna-theme');
+    var stored = localStorage.getItem('vista-theme');
     var theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     if (theme === 'dark') document.documentElement.classList.add('dark');
   } catch (e) {}
