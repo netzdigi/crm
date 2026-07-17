@@ -1,14 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { useClerk, useUser } from "@clerk/nextjs";
 
 export function UserMenu() {
   const { user } = useUser();
-  const { signOut } = useClerk();
+  const { signOut, loaded } = useClerk();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await signOut(() => router.push("/login"));
+    } catch (err) {
+      console.error("Sign out failed:", err);
+      setSigningOut(false);
+    }
+  }
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -48,11 +61,12 @@ export function UserMenu() {
           </div>
           <button
             type="button"
-            onClick={() => signOut({ redirectUrl: "/login" })}
-            className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[13px] font-medium text-negative transition-colors duration-150 hover:bg-active cursor-pointer"
+            onClick={handleSignOut}
+            disabled={signingOut || !loaded}
+            className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-[13px] font-medium text-negative transition-colors duration-150 hover:bg-active cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
           >
             <LogOut size={14} />
-            Изход
+            {signingOut ? "Излизане…" : "Изход"}
           </button>
         </div>
       )}
