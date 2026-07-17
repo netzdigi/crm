@@ -5,10 +5,13 @@ import { LayoutGrid, Search, Bell, Menu } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { UserMenu } from "./UserMenu";
 import { navItems } from "./SidebarNav";
+import { useCompany } from "@/lib/company-context";
 
 export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
   const pathname = usePathname();
-  const current = navItems.find((item) => item.href === pathname) ?? navItems[0];
+  const { slug } = useCompany();
+  const current =
+    navItems.find((item) => `/${slug}${item.path}` === pathname) ?? navItems[0];
   const CrumbIcon = current.icon;
 
   return (
@@ -23,7 +26,7 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
           <Menu size={17} />
         </button>
         <div className="flex items-center gap-2">
-          <CrumbIcon size={15} strokeWidth={2} className="hidden text-ink-soft sm:block" />
+          <LayoutGrid size={15} strokeWidth={2} className="hidden text-ink-soft sm:block" />
           <span>{current.label}</span>
         </div>
       </div>
