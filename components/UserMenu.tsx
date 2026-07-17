@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { useClerk, useUser } from "@clerk/nextjs";
 
 export function UserMenu() {
   const { user } = useUser();
   const { signOut, loaded } = useClerk();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -16,10 +14,14 @@ export function UserMenu() {
   async function handleSignOut() {
     setSigningOut(true);
     try {
-      await signOut(() => router.push("/login"));
+      await signOut();
     } catch (err) {
       console.error("Sign out failed:", err);
-      setSigningOut(false);
+    } finally {
+      // Hard navigation, not router.push: guarantees a fresh request to
+      // /login regardless of any client-router/cache state, and there's
+      // no component left afterwards for setSigningOut(false) to matter.
+      window.location.href = "/login";
     }
   }
 
