@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { GripVertical, Pencil, Plus, Check, X as XIcon } from "lucide-react";
 import {
   clients as initialClients,
@@ -18,18 +18,31 @@ const statusTone: Record<ClientStatus, "positive" | "accent" | "neutral"> = {
   Неактивен: "neutral",
 };
 
+const DRAG_THRESHOLD = 6;
+
 let boardCounter = 0;
+
+interface DragState {
+  id: string;
+  startX: number;
+  startY: number;
+  moved: boolean;
+  pointerId: number;
+}
 
 export function ClientsKanban() {
   const [boards, setBoards] = useState<PipelineBoard[]>(initialPipelineBoards);
   const [clients, setClients] = useState<Client[]>(initialClients);
   const [openClientId, setOpenClientId] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const [dragOverBoardId, setDragOverBoardId] = useState<string | null>(null);
   const [editingBoardId, setEditingBoardId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const dragStateRef = useRef<DragState | null>(null);
 
   const openClient = clients.find((c) => c.id === openClientId) ?? null;
+  const draggedClient = draggedId ? clients.find((c) => c.id === draggedId) ?? null : null;
 
   function moveClientToBoard(id: string, boardId: string) {
     setClients((prev) => prev.map((c) => (c.id === id ? { ...c, boardId } : c)));
@@ -63,6 +76,63 @@ export function ClientsKanban() {
     setEditingName("Ново табло");
   }
 
+  function resetDrag() {
+    dragStateRef.current = null;
+    setDraggedId(null);
+    setDragPos(null);
+    setDragOverBoardId(null);
+  }
+
+  function handleCardPointerDown(e: React.PointerEvent<HTMLDivElement>, clientId: string) {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragStateRef.current = {
+      id: clientId,
+      startX: e.clientX,
+      startY: e.clientY,
+      moved: false,
+      pointerId: e.pointerId,
+    };
+  }
+
+  function handleCardPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const state = dragStateRef.current;
+    if (!state || state.pointerId !== e.pointerId) return;
+
+    if (!state.moved) {
+      const dx = e.clientX - state.startX;
+      const dy = e.clientY - state.startY;
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      state.moved = true;
+      setDraggedId(state.id);
+    }
+
+    setDragPos({ x: e.clientX, y: e.clientY });
+    const hovered = document.elementFromPoint(e.clientX, e.clientY);
+    const boardEl = hovered?.closest<HTMLElement>("[data-board-id]");
+    setDragOverBoardId(boardEl?.dataset.boardId ?? null);
+  }
+
+  function handleCardPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    const state = dragStateRef.current;
+    if (!state || state.pointerId !== e.pointerId) return;
+
+    if (state.moved) {
+      const hovered = document.elementFromPoint(e.clientX, e.clientY);
+      const boardEl = hovered?.closest<HTMLElement>("[data-board-id]");
+      const targetBoardId = boardEl?.dataset.boardId;
+      if (targetBoardId) moveClientToBoard(state.id, targetBoardId);
+    } else {
+      setOpenClientId(state.id);
+    }
+    resetDrag();
+  }
+
+  function handleCardPointerCancel(e: React.PointerEvent<HTMLDivElement>) {
+    if (dragStateRef.current?.pointerId !== e.pointerId) return;
+    resetDrag();
+  }
+
   return (
     <>
       <div className="flex items-start gap-4 overflow-x-auto pb-2">
@@ -74,16 +144,7 @@ export function ClientsKanban() {
           return (
             <div
               key={board.id}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOverBoardId(board.id);
-              }}
-              onDragLeave={() => setDragOverBoardId((id) => (id === board.id ? null : id))}
-              onDrop={() => {
-                if (draggedId) moveClientToBoard(draggedId, board.id);
-                setDraggedId(null);
-                setDragOverBoardId(null);
-              }}
+              data-board-id={board.id}
               className={`group/board flex w-[280px] flex-shrink-0 flex-col gap-2.5 rounded-lg border border-dashed p-2.5 transition-colors duration-150 ${
                 isDragOver ? "border-accent bg-accent-soft/40" : "border-transparent"
               }`}
@@ -138,17 +199,22 @@ export function ClientsKanban() {
 
               <div className="flex flex-col gap-2">
                 {boardClients.map((client) => (
-                  <button
+                  <div
                     key={client.id}
-                    type="button"
-                    draggable
-                    onDragStart={() => setDraggedId(client.id)}
-                    onDragEnd={() => {
-                      setDraggedId(null);
-                      setDragOverBoardId(null);
+                    role="button"
+                    tabIndex={0}
+                    onPointerDown={(e) => handleCardPointerDown(e, client.id)}
+                    onPointerMove={handleCardPointerMove}
+                    onPointerUp={handleCardPointerUp}
+                    onPointerCancel={handleCardPointerCancel}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setOpenClientId(client.id);
+                      }
                     }}
-                    onClick={() => setOpenClientId(client.id)}
-                    className={`group/card flex flex-col items-start gap-1.5 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-shadow duration-150 hover:shadow-card cursor-pointer ${
+                    style={{ touchAction: "none", WebkitTouchCallout: "none" }}
+                    className={`group/card flex select-none flex-col items-start gap-1.5 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-shadow duration-150 hover:shadow-card cursor-grab active:cursor-grabbing ${
                       draggedId === client.id ? "opacity-40" : ""
                     }`}
                   >
@@ -168,7 +234,7 @@ export function ClientsKanban() {
                         {client.lastContact}
                       </span>
                     </div>
-                  </button>
+                  </div>
                 ))}
 
                 {boardClients.length === 0 && (
@@ -190,6 +256,15 @@ export function ClientsKanban() {
           Добави дъска
         </button>
       </div>
+
+      {draggedClient && dragPos && (
+        <div
+          className="pointer-events-none fixed z-[60] w-[240px] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-accent bg-surface px-3 py-2.5 text-[12.5px] font-semibold leading-tight text-ink shadow-popover"
+          style={{ left: dragPos.x, top: dragPos.y }}
+        >
+          {draggedClient.company}
+        </div>
+      )}
 
       {openClient && (
         <ClientDetailPanel
