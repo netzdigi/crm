@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { X, Phone, Mail, Building2, GripVertical } from "lucide-react";
+import { useState } from "react";
+import { GripVertical } from "lucide-react";
 import { clients as initialClients, type Client, type ClientStatus } from "@/lib/data";
+import { ClientDetailPanel } from "@/components/ClientDetailPanel";
 
 const columns: { status: ClientStatus; label: string }[] = [
   { status: "Нов", label: "Нов" },
@@ -31,15 +32,6 @@ export function ClientsKanban() {
   function updateNotes(id: string, notes: string) {
     setClients((prev) => prev.map((c) => (c.id === id ? { ...c, notes } : c)));
   }
-
-  useEffect(() => {
-    if (!openClientId) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpenClientId(null);
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openClientId]);
 
   return (
     <>
@@ -113,65 +105,11 @@ export function ClientsKanban() {
       </div>
 
       {openClient && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4"
-          onClick={() => setOpenClientId(null)}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-lg border border-border bg-surface p-6 shadow-popover"
-          >
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-active text-ink-soft">
-                  <Building2 size={16} />
-                </div>
-                <div>
-                  <div className="text-[14.5px] font-semibold leading-tight">
-                    {openClient.company}
-                  </div>
-                  <div className="text-[12px] text-ink-soft">{openClient.contact}</div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpenClientId(null)}
-                aria-label="Затвори"
-                className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[7px] text-ink-soft hover:bg-active cursor-pointer"
-              >
-                <X size={15} />
-              </button>
-            </div>
-
-            <div className="mb-4 flex flex-col gap-2.5">
-              <a
-                href={`tel:${openClient.phone.replace(/\s/g, "")}`}
-                className="flex items-center gap-2.5 rounded-[8px] border border-border px-3 py-2.5 text-[13px] transition-colors duration-150 hover:bg-active"
-              >
-                <Phone size={14} className="text-ink-soft" />
-                {openClient.phone}
-              </a>
-              <a
-                href={`mailto:${openClient.email}`}
-                className="flex items-center gap-2.5 rounded-[8px] border border-border px-3 py-2.5 text-[13px] transition-colors duration-150 hover:bg-active"
-              >
-                <Mail size={14} className="text-ink-soft" />
-                {openClient.email}
-              </a>
-            </div>
-
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[12px] font-medium text-ink-soft">Бележки</span>
-              <textarea
-                value={openClient.notes}
-                onChange={(e) => updateNotes(openClient.id, e.target.value)}
-                rows={4}
-                placeholder="Добави бележка за този клиент…"
-                className="resize-none rounded-[8px] border border-border bg-paper px-3 py-2 text-[13px] text-ink outline-none focus-visible:border-accent"
-              />
-            </label>
-          </div>
-        </div>
+        <ClientDetailPanel
+          client={openClient}
+          onClose={() => setOpenClientId(null)}
+          onNotesChange={(notes) => updateNotes(openClient.id, notes)}
+        />
       )}
     </>
   );
