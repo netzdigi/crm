@@ -210,6 +210,105 @@ export const communications = [
   { icon: "invoice" as const, text: "Изпратена фактура #1045 до Северен вятър ЕООД", time: "Преди 2 часа" },
 ];
 
+// Per-client communication history (shown in the large client detail panel).
+// Placeholder data for now — this thread is where synced Gmail messages will
+// land once the Gmail integration is connected.
+
+export type CommunicationChannel = "email" | "call" | "note";
+export type CommunicationDirection = "incoming" | "outgoing";
+
+export interface ClientCommunication {
+  id: string;
+  channel: CommunicationChannel;
+  direction: CommunicationDirection;
+  subject: string;
+  preview: string;
+  time: string;
+}
+
+export const clientCommunications: Record<string, ClientCommunication[]> = {
+  c1: [
+    {
+      id: "c1-1",
+      channel: "email",
+      direction: "outgoing",
+      subject: "Оферта за годишен договор",
+      preview: "Изпратихме актуализираната оферта с намалена такса за обслужване при годишен план.",
+      time: "Преди 40 мин",
+    },
+    {
+      id: "c1-2",
+      channel: "call",
+      direction: "incoming",
+      subject: "Обаждане относно условията",
+      preview: "Мартин попита за възможност за поетапно плащане на годишния абонамент.",
+      time: "Преди 2 часа",
+    },
+    {
+      id: "c1-3",
+      channel: "email",
+      direction: "incoming",
+      subject: "Re: Фактура #1045",
+      preview: "Потвърждение за получена фактура, ще бъде платена до края на седмицата.",
+      time: "Вчера",
+    },
+    {
+      id: "c1-4",
+      channel: "note",
+      direction: "outgoing",
+      subject: "Вътрешна бележка",
+      preview: "Клиентът е с най-висок приоритет — редовно плаща в срок и разширява екипа си.",
+      time: "Преди 3 дни",
+    },
+  ],
+  c2: [
+    {
+      id: "c2-1",
+      channel: "call",
+      direction: "outgoing",
+      subject: "Обаждане за подновяване",
+      preview: "Обсъдихме подновяването на договора преди изтичане на текущия план на 30 юли.",
+      time: "Вчера",
+    },
+    {
+      id: "c2-2",
+      channel: "email",
+      direction: "incoming",
+      subject: "Въпрос за нов модул",
+      preview: "Диана попита дали може да добави модул за интеграции към текущия план.",
+      time: "Преди 4 дни",
+    },
+  ],
+  c3: [
+    {
+      id: "c3-1",
+      channel: "email",
+      direction: "outgoing",
+      subject: "Добре дошли във Vista",
+      preview: "Изпратено приветствено писмо с данни за достъп до работното пространство.",
+      time: "Преди 3 дни",
+    },
+  ],
+  c4: [
+    {
+      id: "c4-1",
+      channel: "email",
+      direction: "outgoing",
+      subject: "Проверка на активността",
+      preview: "Изпратен имейл за проверка дали все още се нуждаят от абонамента.",
+      time: "Преди 2 седмици",
+    },
+    {
+      id: "c4-2",
+      channel: "email",
+      direction: "outgoing",
+      subject: "Второ напомняне",
+      preview: "Второ напомняне за подновяване — без отговор.",
+      time: "Преди 3 седмици",
+    },
+  ],
+};
+
 // Integrations
 
 export const integrations = [
