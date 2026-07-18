@@ -7,7 +7,7 @@ export default function ClientsPage() {
     <>
       <PageHeader
         title="Клиенти и комуникация"
-        subtitle="Плъзгай карта между колоните, за да смениш статуса, или я отвори за подробности."
+        subtitle="Плъзгай карта между дъските, за да преместиш клиент, или я отвори за подробности."
       />
       <ClientsKanban />
       <div className="mt-4">
