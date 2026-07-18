@@ -28,7 +28,7 @@ const navGroups = [
   {
     label: "Работно пространство",
     items: [
-      { icon: Users, label: "Клиенти и комуникация", href: "/clients" },
+      { icon: Users, label: "Клиенти", href: "/clients" },
       { icon: Globe, label: "Интеграции", href: "/integrations" },
       { icon: KeyRound, label: "API ключове", href: "/api-keys" },
     ],
