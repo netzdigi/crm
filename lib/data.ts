@@ -150,16 +150,58 @@ export const workflows = [
 
 export type ClientStatus = "Активен" | "Нов" | "Неактивен";
 
-export const clients: {
+export interface Client {
+  id: string;
   company: string;
   contact: string;
+  phone: string;
+  email: string;
   status: ClientStatus;
   lastContact: string;
-}[] = [
-  { company: "Северен вятър ЕООД", contact: "Мартин Петров", status: "Активен", lastContact: "Преди 2 часа" },
-  { company: "Синева ООД", contact: "Диана Колева", status: "Активен", lastContact: "Вчера" },
-  { company: "Дъбрава Студио", contact: "Йордан Тодоров", status: "Нов", lastContact: "Преди 3 дни" },
-  { company: "Гранит Пропъртис", contact: "Радост Иванова", status: "Неактивен", lastContact: "Преди 3 седмици" },
+  notes: string;
+}
+
+export const clients: Client[] = [
+  {
+    id: "c1",
+    company: "Северен вятър ЕООД",
+    contact: "Мартин Петров",
+    phone: "+359 88 123 4567",
+    email: "martin@severenvyatyr.bg",
+    status: "Активен",
+    lastContact: "Преди 2 часа",
+    notes: "Очаква оферта за годишен договор до петък.",
+  },
+  {
+    id: "c2",
+    company: "Синева ООД",
+    contact: "Диана Колева",
+    phone: "+359 87 456 7890",
+    email: "diana@sineva.bg",
+    status: "Активен",
+    lastContact: "Вчера",
+    notes: "Подновяване на договора — обади се преди 30 юли.",
+  },
+  {
+    id: "c3",
+    company: "Дъбрава Студио",
+    contact: "Йордан Тодоров",
+    phone: "+359 89 234 5678",
+    email: "yordan@dabravastudio.bg",
+    status: "Нов",
+    lastContact: "Преди 3 дни",
+    notes: "",
+  },
+  {
+    id: "c4",
+    company: "Гранит Пропъртис",
+    contact: "Радост Иванова",
+    phone: "+359 88 345 6789",
+    email: "radost@granitproperties.bg",
+    status: "Неактивен",
+    lastContact: "Преди 3 седмици",
+    notes: "Не е отговорила на последните два имейла.",
+  },
 ];
 
 export const communications = [
