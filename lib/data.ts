@@ -150,6 +150,10 @@ export const workflows = [
 
 export type ClientStatus = "Активен" | "Нов" | "Неактивен";
 
+export type PipelineName = "Продажби" | "Поддръжка";
+
+export const pipelines: PipelineName[] = ["Продажби", "Поддръжка"];
+
 export interface Client {
   id: string;
   company: string;
@@ -157,6 +161,7 @@ export interface Client {
   phone: string;
   email: string;
   status: ClientStatus;
+  pipeline: PipelineName;
   lastContact: string;
   notes: string;
 }
@@ -169,6 +174,7 @@ export const clients: Client[] = [
     phone: "+359 88 123 4567",
     email: "martin@severenvyatyr.bg",
     status: "Активен",
+    pipeline: "Поддръжка",
     lastContact: "Преди 2 часа",
     notes: "Очаква оферта за годишен договор до петък.",
   },
@@ -179,6 +185,7 @@ export const clients: Client[] = [
     phone: "+359 87 456 7890",
     email: "diana@sineva.bg",
     status: "Активен",
+    pipeline: "Поддръжка",
     lastContact: "Вчера",
     notes: "Подновяване на договора — обади се преди 30 юли.",
   },
@@ -189,6 +196,7 @@ export const clients: Client[] = [
     phone: "+359 89 234 5678",
     email: "yordan@dabravastudio.bg",
     status: "Нов",
+    pipeline: "Продажби",
     lastContact: "Преди 3 дни",
     notes: "",
   },
@@ -199,8 +207,31 @@ export const clients: Client[] = [
     phone: "+359 88 345 6789",
     email: "radost@granitproperties.bg",
     status: "Неактивен",
+    pipeline: "Продажби",
     lastContact: "Преди 3 седмици",
     notes: "Не е отговорила на последните два имейла.",
+  },
+  {
+    id: "c5",
+    company: "Ивелин Груп",
+    contact: "Ивелин Стоянов",
+    phone: "+359 89 567 1234",
+    email: "ivelin@ivelingroup.bg",
+    status: "Нов",
+    pipeline: "Продажби",
+    lastContact: "Преди 5 часа",
+    notes: "Дойде през препоръка от Северен вятър ЕООД.",
+  },
+  {
+    id: "c6",
+    company: "Балкан Логистика",
+    contact: "Стефан Николов",
+    phone: "+359 87 678 2345",
+    email: "stefan@balkanlogistika.bg",
+    status: "Активен",
+    pipeline: "Поддръжка",
+    lastContact: "Преди 6 дни",
+    notes: "Доволен клиент — обмисля надграждане на плана.",
   },
 ];
 
@@ -305,6 +336,26 @@ export const clientCommunications: Record<string, ClientCommunication[]> = {
       subject: "Второ напомняне",
       preview: "Второ напомняне за подновяване — без отговор.",
       time: "Преди 3 седмици",
+    },
+  ],
+  c5: [
+    {
+      id: "c5-1",
+      channel: "email",
+      direction: "incoming",
+      subject: "Препоръка от Северен вятър ЕООД",
+      preview: "Ивелин се свърза с нас след препоръка и поиска демонстрация на Vista.",
+      time: "Преди 5 часа",
+    },
+  ],
+  c6: [
+    {
+      id: "c6-1",
+      channel: "call",
+      direction: "incoming",
+      subject: "Въпрос за надграждане на плана",
+      preview: "Стефан пита за разликите между текущия план и Vista Business.",
+      time: "Преди 6 дни",
     },
   ],
 };
