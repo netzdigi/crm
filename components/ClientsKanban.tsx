@@ -1,16 +1,16 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GripVertical, Pencil, Plus, Check, X as XIcon } from "lucide-react";
-import {
-  clients as initialClients,
-  initialPipelineBoards,
-  type Client,
-  type ClientStatus,
-  type PipelineBoard,
-} from "@/lib/data";
+import type { Client, ClientCommunication, ClientStatus, PipelineBoard } from "@/lib/types";
 import { Badge } from "@/components/Badge";
 import { ClientDetailPanel } from "@/components/ClientDetailPanel";
+import {
+  addBoardAction,
+  moveClientToBoardAction,
+  renameBoardAction,
+  updateClientNotesAction,
+} from "@/lib/actions/clients";
 
 const statusTone: Record<ClientStatus, "positive" | "accent" | "neutral"> = {
   Активен: "positive",
@@ -19,8 +19,7 @@ const statusTone: Record<ClientStatus, "positive" | "accent" | "neutral"> = {
 };
 
 const DRAG_THRESHOLD = 6;
-
-let boardCounter = 0;
+const NOTES_SAVE_DELAY = 600;
 
 interface DragState {
   id: string;
@@ -30,8 +29,16 @@ interface DragState {
   pointerId: number;
 }
 
-export function ClientsKanban() {
-  const [boards, setBoards] = useState<PipelineBoard[]>(initialPipelineBoards);
+export function ClientsKanban({
+  initialBoards,
+  initialClients,
+  communications,
+}: {
+  initialBoards: PipelineBoard[];
+  initialClients: Client[];
+  communications: Record<string, ClientCommunication[]>;
+}) {
+  const [boards, setBoards] = useState<PipelineBoard[]>(initialBoards);
   const [clients, setClients] = useState<Client[]>(initialClients);
   const [openClientId, setOpenClientId] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -40,16 +47,25 @@ export function ClientsKanban() {
   const [editingBoardId, setEditingBoardId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const dragStateRef = useRef<DragState | null>(null);
+  const notesSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  useEffect(() => setBoards(initialBoards), [initialBoards]);
+  useEffect(() => setClients(initialClients), [initialClients]);
 
   const openClient = clients.find((c) => c.id === openClientId) ?? null;
   const draggedClient = draggedId ? clients.find((c) => c.id === draggedId) ?? null : null;
 
   function moveClientToBoard(id: string, boardId: string) {
     setClients((prev) => prev.map((c) => (c.id === id ? { ...c, boardId } : c)));
+    moveClientToBoardAction(id, boardId);
   }
 
   function updateNotes(id: string, notes: string) {
     setClients((prev) => prev.map((c) => (c.id === id ? { ...c, notes } : c)));
+    if (notesSaveTimers.current[id]) clearTimeout(notesSaveTimers.current[id]);
+    notesSaveTimers.current[id] = setTimeout(() => {
+      updateClientNotesAction(id, notes);
+    }, NOTES_SAVE_DELAY);
   }
 
   function startEditingBoard(board: PipelineBoard) {
@@ -60,18 +76,16 @@ export function ClientsKanban() {
   function commitBoardName() {
     const trimmed = editingName.trim();
     if (trimmed && editingBoardId) {
-      setBoards((prev) =>
-        prev.map((b) => (b.id === editingBoardId ? { ...b, name: trimmed } : b))
-      );
+      const boardId = editingBoardId;
+      setBoards((prev) => prev.map((b) => (b.id === boardId ? { ...b, name: trimmed } : b)));
+      renameBoardAction(boardId, trimmed);
     }
     setEditingBoardId(null);
   }
 
-  function addBoard() {
-    boardCounter += 1;
-    const id = `board-${Date.now()}-${boardCounter}`;
-    const board: PipelineBoard = { id, name: "Ново табло" };
-    setBoards((prev) => [...prev, board]);
+  async function addBoard() {
+    const id = await addBoardAction("Ново табло");
+    setBoards((prev) => [...prev, { id, name: "Ново табло" }]);
     setEditingBoardId(id);
     setEditingName("Ново табло");
   }
@@ -269,6 +283,7 @@ export function ClientsKanban() {
       {openClient && (
         <ClientDetailPanel
           client={openClient}
+          thread={communications[openClient.id] ?? []}
           onClose={() => setOpenClientId(null)}
           onNotesChange={(notes) => updateNotes(openClient.id, notes)}
         />

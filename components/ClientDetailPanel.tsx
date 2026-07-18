@@ -3,12 +3,7 @@
 import { useEffect } from "react";
 import { X, Phone, Mail, Building2, StickyNote, RefreshCw, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/Badge";
-import {
-  clientCommunications,
-  type Client,
-  type ClientStatus,
-  type CommunicationChannel,
-} from "@/lib/data";
+import type { Client, ClientCommunication, ClientStatus, CommunicationChannel } from "@/lib/types";
 
 const statusTone: Record<ClientStatus, "positive" | "accent" | "neutral"> = {
   Активен: "positive",
@@ -24,10 +19,12 @@ const channelIcon: Record<CommunicationChannel, typeof Mail> = {
 
 export function ClientDetailPanel({
   client,
+  thread,
   onClose,
   onNotesChange,
 }: {
   client: Client;
+  thread: ClientCommunication[];
   onClose: () => void;
   onNotesChange: (notes: string) => void;
 }) {
@@ -38,8 +35,6 @@ export function ClientDetailPanel({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
-
-  const thread = clientCommunications[client.id] ?? [];
 
   return (
     <div
