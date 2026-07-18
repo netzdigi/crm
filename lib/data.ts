@@ -241,12 +241,6 @@ export const clients: Client[] = [
   },
 ];
 
-export const communications = [
-  { icon: "mail" as const, text: "Имейл до Северен вятър ЕООД относно офертата", time: "Преди 40 мин" },
-  { icon: "user" as const, text: "Обаждане със Синева ООД — подновяване на договор", time: "Преди 3 часа" },
-  { icon: "invoice" as const, text: "Изпратена фактура #1045 до Северен вятър ЕООД", time: "Преди 2 часа" },
-];
-
 // Per-client communication history (shown in the large client detail panel).
 // Placeholder data for now — this thread is where synced Gmail messages will
 // land once the Gmail integration is connected.
