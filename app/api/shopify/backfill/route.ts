@@ -10,6 +10,12 @@ import { classifyChannel } from "@/lib/shopify/channel";
 // Iterates orders (not customers) so a single pass both (a) only ever syncs
 // customers who have actually ordered, and (b) fills the orders table the
 // dashboard's revenue/channel numbers are computed from.
+//
+// Each page's orders are processed concurrently (not one at a time) — a
+// store with thousands of orders processed sequentially risks exceeding the
+// serverless function's time limit. If the whole store still can't finish
+// within the time budget, the response includes nextCursor: revisit the
+// same URL with &cursor=<value> appended to continue where it left off.
 const QUERY = `
   query orders($cursor: String) {
     orders(first: 50, after: $cursor) {
@@ -84,6 +90,56 @@ function formatAddress(address: CustomerAddress | null): string {
     .join(", ");
 }
 
+async function processOrder(o: OrderNode): Promise<{ ok: boolean; hadCustomer: boolean }> {
+  const orderId = shopifyLegacyId(o.id);
+  let clientId: string | null = null;
+
+  try {
+    if (o.customer) {
+      const customerId = shopifyLegacyId(o.customer.id);
+      const name = [o.customer.firstName, o.customer.lastName].filter(Boolean).join(" ").trim();
+      clientId = await upsertShopifyCustomer({
+        shopifyCustomerId: customerId,
+        company: o.customer.defaultAddress?.company || name || o.customer.email || `Клиент ${customerId}`,
+        contact: name || o.customer.email || `Клиент ${customerId}`,
+        phone: o.customer.phone ?? "",
+        email: o.customer.email ?? "",
+        address: formatAddress(o.customer.defaultAddress),
+        marketingStatus: o.customer.emailMarketingConsent?.marketingState ?? "",
+      });
+    }
+
+    const totalPrice = Number(o.totalPriceSet.shopMoney.amount);
+    const currency = o.totalPriceSet.shopMoney.currencyCode;
+
+    await upsertOrder({
+      shopifyOrderId: orderId,
+      clientId,
+      name: o.name ?? `#${orderId}`,
+      totalPrice,
+      currency,
+      channel: classifyChannel(o.sourceName, null),
+      occurredAt: new Date(o.createdAt),
+    });
+
+    if (clientId) {
+      await logOrderNote(
+        clientId,
+        `Поръчка ${o.name ?? `#${orderId}`}`,
+        `Обща сума: ${totalPrice.toFixed(2)} ${currency}`,
+        `note-order-${orderId}`
+      );
+    }
+
+    return { ok: true, hadCustomer: Boolean(clientId) };
+  } catch (err) {
+    console.error(`Backfill: failed to process order ${orderId}:`, err);
+    return { ok: false, hadCustomer: false };
+  }
+}
+
+const TIME_BUDGET_MS = 4 * 60 * 1000; // stay comfortably under Vercel's function time limit
+
 export async function GET(request: NextRequest) {
   const expected = process.env.SHOPIFY_API_SECRET;
   const provided = request.nextUrl.searchParams.get("secret");
@@ -91,63 +147,35 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let cursor: string | undefined;
+  const startedAt = Date.now();
+  let cursor = request.nextUrl.searchParams.get("cursor") ?? undefined;
   let ordersImported = 0;
+  let ordersFailed = 0;
   let customersImported = 0;
+  let done = false;
 
   for (;;) {
     const data = await shopifyGraphql<OrdersResult>(QUERY, { cursor });
     const { edges, pageInfo } = data.orders;
 
-    for (const edge of edges) {
-      const o = edge.node;
-      const orderId = shopifyLegacyId(o.id);
-      let clientId: string | null = null;
+    const results = await Promise.all(edges.map((edge) => processOrder(edge.node)));
+    ordersImported += results.filter((r) => r.ok).length;
+    ordersFailed += results.filter((r) => !r.ok).length;
+    customersImported += results.filter((r) => r.hadCustomer).length;
+    cursor = edges[edges.length - 1]?.cursor ?? cursor;
 
-      if (o.customer) {
-        const customerId = shopifyLegacyId(o.customer.id);
-        const name = [o.customer.firstName, o.customer.lastName].filter(Boolean).join(" ").trim();
-        clientId = await upsertShopifyCustomer({
-          shopifyCustomerId: customerId,
-          company: o.customer.defaultAddress?.company || name || o.customer.email || `Клиент ${customerId}`,
-          contact: name || o.customer.email || `Клиент ${customerId}`,
-          phone: o.customer.phone ?? "",
-          email: o.customer.email ?? "",
-          address: formatAddress(o.customer.defaultAddress),
-          marketingStatus: o.customer.emailMarketingConsent?.marketingState ?? "",
-        });
-        customersImported++;
-      }
-
-      const totalPrice = Number(o.totalPriceSet.shopMoney.amount);
-      const currency = o.totalPriceSet.shopMoney.currencyCode;
-      const occurredAt = new Date(o.createdAt);
-
-      await upsertOrder({
-        shopifyOrderId: orderId,
-        clientId,
-        name: o.name ?? `#${orderId}`,
-        totalPrice,
-        currency,
-        channel: classifyChannel(o.sourceName, null),
-        occurredAt,
-      });
-
-      if (clientId) {
-        await logOrderNote(
-          clientId,
-          `Поръчка ${o.name ?? `#${orderId}`}`,
-          `Обща сума: ${totalPrice.toFixed(2)} ${currency}`,
-          `note-order-${orderId}`
-        );
-      }
-
-      ordersImported++;
-      cursor = edge.cursor;
+    if (!pageInfo.hasNextPage) {
+      done = true;
+      break;
     }
-
-    if (!pageInfo.hasNextPage) break;
+    if (Date.now() - startedAt > TIME_BUDGET_MS) break;
   }
 
-  return NextResponse.json({ ordersImported, customersImported });
+  return NextResponse.json({
+    done,
+    ordersImported,
+    ordersFailed,
+    customersImported,
+    nextCursor: done ? null : cursor,
+  });
 }

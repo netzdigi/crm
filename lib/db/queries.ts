@@ -105,19 +105,25 @@ export interface ShopifyCustomerPayload {
 // onlyUpdateExisting=true for events that don't guarantee an order (e.g.
 // customers/create, customers/update), so a brand-new, order-less customer
 // is never inserted, only refreshed if already present from a real order.
+//
+// The onlyUpdateExisting=false path is a single atomic
+// INSERT ... ON CONFLICT DO UPDATE (not a separate select-then-branch), so
+// it stays correct when the backfill route processes many orders for the
+// same repeat customer concurrently.
 export async function upsertShopifyCustomer(
   payload: ShopifyCustomerPayload,
   onlyUpdateExisting = false
 ): Promise<string | null> {
   const db = getDb();
 
-  const existing = await db
-    .select({ id: clients.id })
-    .from(clients)
-    .where(eq(clients.shopifyCustomerId, payload.shopifyCustomerId))
-    .limit(1);
+  if (onlyUpdateExisting) {
+    const existing = await db
+      .select({ id: clients.id })
+      .from(clients)
+      .where(eq(clients.shopifyCustomerId, payload.shopifyCustomerId))
+      .limit(1);
+    if (existing.length === 0) return null;
 
-  if (existing.length > 0) {
     const id = existing[0].id;
     await db
       .update(clients)
@@ -134,24 +140,37 @@ export async function upsertShopifyCustomer(
     return id;
   }
 
-  if (onlyUpdateExisting) return null;
-
   await ensureShopifyBoard();
-  const id = randomUUID();
-  await db.insert(clients).values({
-    id,
-    boardId: SHOPIFY_BOARD_ID,
-    company: payload.company,
-    contact: payload.contact,
-    phone: payload.phone,
-    email: payload.email,
-    address: payload.address,
-    marketingStatus: payload.marketingStatus,
-    status: "Нов",
-    source: "shopify",
-    shopifyCustomerId: payload.shopifyCustomerId,
-  });
-  return id;
+  const [row] = await db
+    .insert(clients)
+    .values({
+      id: randomUUID(),
+      boardId: SHOPIFY_BOARD_ID,
+      company: payload.company,
+      contact: payload.contact,
+      phone: payload.phone,
+      email: payload.email,
+      address: payload.address,
+      marketingStatus: payload.marketingStatus,
+      status: "Нов",
+      source: "shopify",
+      shopifyCustomerId: payload.shopifyCustomerId,
+    })
+    .onConflictDoUpdate({
+      target: clients.shopifyCustomerId,
+      set: {
+        company: payload.company,
+        contact: payload.contact,
+        phone: payload.phone,
+        email: payload.email,
+        address: payload.address,
+        marketingStatus: payload.marketingStatus,
+        lastContactAt: new Date(),
+      },
+    })
+    .returning({ id: clients.id });
+
+  return row.id;
 }
 
 export async function findClientByShopifyCustomerId(shopifyCustomerId: string) {
@@ -227,10 +246,6 @@ export async function upsertOrder(payload: OrderPayload) {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DAY_LABELS_BG = ["Нед", "Пон", "Вт", "Ср", "Чет", "Пет", "Съб"];
 
-function dayKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
 function formatMoney(amount: number, currency = "EUR"): string {
   const hasCents = Math.round(amount * 100) % 100 !== 0;
   const formatted = new Intl.NumberFormat("bg-BG", {
@@ -257,13 +272,13 @@ function buildSparkline(values: number[]): string {
 function pctChange(curr: number, prev: number): { trend: "up" | "down"; label: string } {
   if (prev === 0) {
     return curr === 0
-      ? { trend: "up", label: "без промяна спрямо предходните 7 дни" }
-      : { trend: "up", label: "ново спрямо предходните 7 дни" };
+      ? { trend: "up", label: "без промяна спрямо предходния период" }
+      : { trend: "up", label: "ново спрямо предходния период" };
   }
   const pct = ((curr - prev) / prev) * 100;
   return {
     trend: pct >= 0 ? "up" : "down",
-    label: `${Math.abs(pct).toFixed(1)}% спрямо предходните 7 дни`,
+    label: `${Math.abs(pct).toFixed(1)}% спрямо предходния период`,
   };
 }
 
@@ -275,14 +290,43 @@ export interface DashboardData {
   activity: { icon: "invoice" | "user"; text: string; time: string }[];
 }
 
+interface Bucket {
+  label: string;
+  start: Date;
+  end: Date;
+}
+
+// For up to 14 days, one bucket per calendar day (weekday label). Beyond
+// that, ~10 evenly-sized buckets with a short date label — the bar chart
+// has no room for 90 individual daily bars.
+function buildBuckets(now: Date, days: number): Bucket[] {
+  if (days <= 14) {
+    return Array.from({ length: days }, (_, i) => {
+      const start = new Date(now.getTime() - (days - 1 - i) * DAY_MS);
+      return { label: DAY_LABELS_BG[start.getDay()], start, end: new Date(start.getTime() + DAY_MS) };
+    });
+  }
+
+  const bucketCount = 10;
+  const bucketMs = (days * DAY_MS) / bucketCount;
+  const rangeStart = new Date(now.getTime() - days * DAY_MS);
+  return Array.from({ length: bucketCount }, (_, i) => {
+    const start = new Date(rangeStart.getTime() + i * bucketMs);
+    const end = new Date(rangeStart.getTime() + (i + 1) * bucketMs);
+    return { label: `${start.getDate()}.${start.getMonth() + 1}`, start, end };
+  });
+}
+
 // Everything the dashboard homepage needs, computed from real Shopify
 // orders/clients instead of static mock data. Degrades gracefully to
-// zeros/empty lists before any orders have synced.
-export async function getDashboardData(): Promise<DashboardData> {
+// zeros/empty lists before any orders have synced. `days` is the current
+// comparison period; the same length immediately before it is used as the
+// "previous period" for trend percentages.
+export async function getDashboardData(days = 7): Promise<DashboardData> {
   const db = getDb();
   const now = new Date();
-  const since = new Date(now.getTime() - 14 * DAY_MS);
-  const currentStart = new Date(now.getTime() - 7 * DAY_MS);
+  const since = new Date(now.getTime() - days * 2 * DAY_MS);
+  const currentStart = new Date(now.getTime() - days * DAY_MS);
 
   const [orderRows, recentClientRows, recentOrderRows] = await Promise.all([
     db.select().from(orders).where(gte(orders.occurredAt, since)).orderBy(asc(orders.occurredAt)),
@@ -321,43 +365,26 @@ export async function getDashboardData(): Promise<DashboardData> {
   const currentNewCustomers = currentClients.length;
   const previousNewCustomers = previousClients.length;
 
-  const dayBuckets = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(now.getTime() - (6 - i) * DAY_MS);
-    return { key: dayKey(d), date: d };
-  });
+  const buckets = buildBuckets(now, days);
+  const inBucket = (d: Date, b: Bucket) => d >= b.start && d < b.end;
 
-  const revenueByDay = new Map<string, number>();
-  const ordersByDay = new Map<string, number>();
-  for (const o of currentOrders) {
-    const key = dayKey(o.occurredAt);
-    revenueByDay.set(key, (revenueByDay.get(key) ?? 0) + Number(o.totalPrice));
-    ordersByDay.set(key, (ordersByDay.get(key) ?? 0) + 1);
-  }
-  const customersByDay = new Map<string, number>();
-  for (const c of currentClients) {
-    const key = dayKey(c.createdAt);
-    customersByDay.set(key, (customersByDay.get(key) ?? 0) + 1);
-  }
+  const revenueSeries = buckets.map((b) =>
+    currentOrders.filter((o) => inBucket(o.occurredAt, b)).reduce((acc, o) => acc + Number(o.totalPrice), 0)
+  );
+  const orderSeries = buckets.map((b) => currentOrders.filter((o) => inBucket(o.occurredAt, b)).length);
+  const customerSeries = buckets.map(
+    (b) => currentClients.filter((c) => inBucket(c.createdAt, b)).length
+  );
+  const avgSeries = buckets.map((_, i) => (orderSeries[i] > 0 ? revenueSeries[i] / orderSeries[i] : 0));
 
-  const maxDailyRevenue = Math.max(1, ...dayBuckets.map((b) => revenueByDay.get(b.key) ?? 0));
-  const weeklyRevenue = dayBuckets.map((b) => {
-    const amount = revenueByDay.get(b.key) ?? 0;
-    return {
-      day: DAY_LABELS_BG[b.date.getDay()],
-      amount: formatMoney(amount),
-      heightPct: Math.round((amount / maxDailyRevenue) * 100),
-    };
-  });
+  const maxBucketRevenue = Math.max(1, ...revenueSeries);
+  const weeklyRevenue = buckets.map((b, i) => ({
+    day: b.label,
+    amount: formatMoney(revenueSeries[i]),
+    heightPct: Math.round((revenueSeries[i] / maxBucketRevenue) * 100),
+  }));
 
-  const revenueSeries = dayBuckets.map((b) => revenueByDay.get(b.key) ?? 0);
-  const orderSeries = dayBuckets.map((b) => ordersByDay.get(b.key) ?? 0);
-  const customerSeries = dayBuckets.map((b) => customersByDay.get(b.key) ?? 0);
-  const avgSeries = dayBuckets.map((b) => {
-    const rev = revenueByDay.get(b.key) ?? 0;
-    const cnt = ordersByDay.get(b.key) ?? 0;
-    return cnt > 0 ? rev / cnt : 0;
-  });
-
+  const periodLabel = `${days} дни`;
   const revenueTrend = pctChange(currentRevenue, previousRevenue);
   const ordersTrend = pctChange(currentOrderCount, previousOrderCount);
   const customersTrend = pctChange(currentNewCustomers, previousNewCustomers);
@@ -365,21 +392,21 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const metrics: StatMetric[] = [
     {
-      label: "Приходи (7 дни)",
+      label: `Приходи (${periodLabel})`,
       value: formatMoney(currentRevenue),
       trendLabel: revenueTrend.label,
       trend: revenueTrend.trend,
       sparkline: buildSparkline(revenueSeries),
     },
     {
-      label: "Поръчки (7 дни)",
+      label: `Поръчки (${periodLabel})`,
       value: String(currentOrderCount),
       trendLabel: ordersTrend.label,
       trend: ordersTrend.trend,
       sparkline: buildSparkline(orderSeries),
     },
     {
-      label: "Нови клиенти (7 дни)",
+      label: `Нови клиенти (${periodLabel})`,
       value: String(currentNewCustomers),
       trendLabel: customersTrend.label,
       trend: customersTrend.trend,
