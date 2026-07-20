@@ -27,24 +27,7 @@ export async function GET(request: NextRequest) {
   const expected = process.env.SHOPIFY_API_SECRET;
   const provided = request.nextUrl.searchParams.get("secret");
   if (!expected || provided !== expected) {
-    // Temporary diagnostics — never echoes the actual secret value, only
-    // shape/length info, to track down a persistent auth mismatch.
-    return NextResponse.json(
-      {
-        error: "Unauthorized",
-        debug: {
-          expectedSet: Boolean(expected),
-          expectedLength: expected?.length ?? 0,
-          expectedFirst2: expected?.slice(0, 2) ?? null,
-          expectedLast2: expected?.slice(-2) ?? null,
-          providedSet: Boolean(provided),
-          providedLength: provided?.length ?? 0,
-          providedFirst2: provided?.slice(0, 2) ?? null,
-          providedLast2: provided?.slice(-2) ?? null,
-        },
-      },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const callbackUrl = new URL("/api/webhooks/shopify", request.url).toString();

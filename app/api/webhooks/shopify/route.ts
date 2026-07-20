@@ -22,13 +22,24 @@ function verifyHmac(rawBody: string, hmacHeader: string | null): boolean {
   return timingSafeEqual(expected, received);
 }
 
+interface ShopifyAddress {
+  address1?: string | null;
+  address2?: string | null;
+  city?: string | null;
+  zip?: string | null;
+  province?: string | null;
+  country?: string | null;
+  company?: string | null;
+}
+
 interface ShopifyCustomer {
   id: number | string;
   email?: string | null;
   phone?: string | null;
   first_name?: string | null;
   last_name?: string | null;
-  default_address?: { company?: string | null } | null;
+  default_address?: ShopifyAddress | null;
+  email_marketing_consent?: { state?: string | null } | null;
 }
 
 interface ShopifyOrder {
@@ -45,21 +56,37 @@ function customerDisplayName(customer: ShopifyCustomer): string {
   return name || customer.email || `Клиент ${customer.id}`;
 }
 
-async function handleCustomerPayload(customer: ShopifyCustomer) {
-  await upsertShopifyCustomer({
-    shopifyCustomerId: String(customer.id),
-    company: customer.default_address?.company || customerDisplayName(customer),
-    contact: customerDisplayName(customer),
-    phone: customer.phone ?? "",
-    email: customer.email ?? "",
-  });
+function formatAddress(address?: ShopifyAddress | null): string {
+  if (!address) return "";
+  return [address.address1, address.address2, address.zip, address.city, address.province, address.country]
+    .filter(Boolean)
+    .join(", ");
+}
+
+// Only customers who have actually ordered belong in the CRM. Standalone
+// customers/create + customers/update events don't guarantee that, so
+// onlyUpdateExisting=true there means they only refresh an already-synced
+// record (created earlier from a real order) instead of creating a new one.
+async function handleCustomerPayload(customer: ShopifyCustomer, onlyUpdateExisting: boolean) {
+  await upsertShopifyCustomer(
+    {
+      shopifyCustomerId: String(customer.id),
+      company: customer.default_address?.company || customerDisplayName(customer),
+      contact: customerDisplayName(customer),
+      phone: customer.phone ?? "",
+      email: customer.email ?? "",
+      address: formatAddress(customer.default_address),
+      marketingStatus: customer.email_marketing_consent?.state ?? "",
+    },
+    onlyUpdateExisting
+  );
 }
 
 async function handleOrderPayload(order: ShopifyOrder) {
   let clientId: string | null = null;
 
   if (order.customer) {
-    await handleCustomerPayload(order.customer);
+    await handleCustomerPayload(order.customer, false);
     clientId = await findClientByShopifyCustomerId(String(order.customer.id));
   } else if (order.email) {
     clientId = await findClientByEmail(order.email);
@@ -94,7 +121,7 @@ export async function POST(request: NextRequest) {
 
   try {
     if (topic.startsWith("customers/")) {
-      await handleCustomerPayload(body as ShopifyCustomer);
+      await handleCustomerPayload(body as ShopifyCustomer, true);
     } else if (topic.startsWith("orders/")) {
       await handleOrderPayload(body as ShopifyOrder);
     } else {

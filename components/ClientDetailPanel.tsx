@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { X, Phone, Mail, Building2, StickyNote, RefreshCw, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { X, Phone, Mail, MapPin, Building2, StickyNote, RefreshCw, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/Badge";
 import type { Client, ClientCommunication, ClientStatus, CommunicationChannel } from "@/lib/types";
 
@@ -9,6 +9,15 @@ const statusTone: Record<ClientStatus, "positive" | "accent" | "neutral"> = {
   Активен: "positive",
   Нов: "accent",
   Неактивен: "neutral",
+};
+
+const marketingStatusLabels: Record<string, string> = {
+  SUBSCRIBED: "Абониран за маркетинг",
+  NOT_SUBSCRIBED: "Не е абониран за маркетинг",
+  PENDING: "Изчаква потвърждение",
+  UNSUBSCRIBED: "Отписан от маркетинг",
+  REDACTED: "Изтрит (GDPR)",
+  INVALID: "Невалиден маркетинг статус",
 };
 
 const channelIcon: Record<CommunicationChannel, typeof Mail> = {
@@ -51,11 +60,16 @@ export function ClientDetailPanel({
               <Building2 size={19} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="font-display text-[17px] font-semibold leading-tight">
                   {client.company}
                 </span>
                 <Badge tone={statusTone[client.status]}>{client.status}</Badge>
+                {client.marketingStatus && (
+                  <Badge tone="neutral">
+                    {marketingStatusLabels[client.marketingStatus] ?? client.marketingStatus}
+                  </Badge>
+                )}
               </div>
               <div className="text-[12.5px] text-ink-soft">{client.contact}</div>
             </div>
@@ -77,20 +91,33 @@ export function ClientDetailPanel({
                 Контакт
               </div>
               <div className="flex flex-col gap-2">
-                <a
-                  href={`tel:${client.phone.replace(/\s/g, "")}`}
-                  className="flex items-center gap-2.5 rounded-[8px] border border-border px-3 py-2.5 text-[13px] transition-colors duration-150 hover:bg-active"
-                >
-                  <Phone size={14} className="text-ink-soft" />
-                  {client.phone}
-                </a>
-                <a
-                  href={`mailto:${client.email}`}
-                  className="flex items-center gap-2.5 rounded-[8px] border border-border px-3 py-2.5 text-[13px] transition-colors duration-150 hover:bg-active"
-                >
-                  <Mail size={14} className="text-ink-soft" />
-                  {client.email}
-                </a>
+                {client.phone && (
+                  <a
+                    href={`tel:${client.phone.replace(/\s/g, "")}`}
+                    className="flex items-center gap-2.5 rounded-[8px] border border-border px-3 py-2.5 text-[13px] transition-colors duration-150 hover:bg-active"
+                  >
+                    <Phone size={14} className="text-ink-soft" />
+                    {client.phone}
+                  </a>
+                )}
+                {client.email && (
+                  <a
+                    href={`mailto:${client.email}`}
+                    className="flex items-center gap-2.5 rounded-[8px] border border-border px-3 py-2.5 text-[13px] transition-colors duration-150 hover:bg-active"
+                  >
+                    <Mail size={14} className="text-ink-soft" />
+                    {client.email}
+                  </a>
+                )}
+                {client.address && (
+                  <div className="flex items-start gap-2.5 rounded-[8px] border border-border px-3 py-2.5 text-[13px]">
+                    <MapPin size={14} className="mt-0.5 flex-shrink-0 text-ink-soft" />
+                    {client.address}
+                  </div>
+                )}
+                {!client.phone && !client.email && !client.address && (
+                  <div className="text-[12.5px] text-ink-mute">Няма данни за контакт.</div>
+                )}
               </div>
               <div className="mt-3 text-[11.5px] text-ink-mute">
                 Последен контакт: {client.lastContact}

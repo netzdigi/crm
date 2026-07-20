@@ -6,7 +6,7 @@ import type { Client, ClientCommunication, PipelineBoard } from "@/lib/types";
 import { formatRelativeBg } from "@/lib/format";
 
 const SHOPIFY_BOARD_ID = "shopify";
-const SHOPIFY_BOARD_NAME = "Shopify";
+const SHOPIFY_BOARD_NAME = "Versendet";
 
 export async function getBoards(): Promise<PipelineBoard[]> {
   const db = getDb();
@@ -31,6 +31,8 @@ export async function getClientsWithCommunications(): Promise<{
     contact: c.contact,
     phone: c.phone,
     email: c.email,
+    address: c.address,
+    marketingStatus: c.marketingStatus,
     status: c.status,
     boardId: c.boardId,
     lastContact: formatRelativeBg(c.lastContactAt, now),
@@ -92,13 +94,21 @@ export interface ShopifyCustomerPayload {
   contact: string;
   phone: string;
   email: string;
+  address: string;
+  marketingStatus: string;
 }
 
 // Upserts a client by Shopify customer id, auto-creating a dedicated
-// "Shopify" board on first sync so incoming customers are easy to spot.
-export async function upsertShopifyCustomer(payload: ShopifyCustomerPayload): Promise<string> {
+// "Versendet" board on first sync so incoming customers are easy to spot.
+// Only customers who have actually ordered should land in the CRM — pass
+// onlyUpdateExisting=true for events that don't guarantee an order (e.g.
+// customers/create, customers/update), so a brand-new, order-less customer
+// is never inserted, only refreshed if already present from a real order.
+export async function upsertShopifyCustomer(
+  payload: ShopifyCustomerPayload,
+  onlyUpdateExisting = false
+): Promise<string | null> {
   const db = getDb();
-  await ensureShopifyBoard();
 
   const existing = await db
     .select({ id: clients.id })
@@ -115,12 +125,17 @@ export async function upsertShopifyCustomer(payload: ShopifyCustomerPayload): Pr
         contact: payload.contact,
         phone: payload.phone,
         email: payload.email,
+        address: payload.address,
+        marketingStatus: payload.marketingStatus,
         lastContactAt: new Date(),
       })
       .where(eq(clients.id, id));
     return id;
   }
 
+  if (onlyUpdateExisting) return null;
+
+  await ensureShopifyBoard();
   const id = randomUUID();
   await db.insert(clients).values({
     id,
@@ -129,6 +144,8 @@ export async function upsertShopifyCustomer(payload: ShopifyCustomerPayload): Pr
     contact: payload.contact,
     phone: payload.phone,
     email: payload.email,
+    address: payload.address,
+    marketingStatus: payload.marketingStatus,
     status: "Нов",
     source: "shopify",
     shopifyCustomerId: payload.shopifyCustomerId,
