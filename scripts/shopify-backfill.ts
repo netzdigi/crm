@@ -92,6 +92,49 @@ function formatAddress(address: CustomerAddress | null): string {
     .join(", ");
 }
 
+async function processOrder(o: OrderNode): Promise<{ hadCustomer: boolean }> {
+  const orderId = shopifyLegacyId(o.id);
+  let clientId: string | null = null;
+
+  if (o.customer) {
+    const customerId = shopifyLegacyId(o.customer.id);
+    const name = [o.customer.firstName, o.customer.lastName].filter(Boolean).join(" ").trim();
+    clientId = await upsertShopifyCustomer({
+      shopifyCustomerId: customerId,
+      company: o.customer.defaultAddress?.company || name || o.customer.email || `Клиент ${customerId}`,
+      contact: name || o.customer.email || `Клиент ${customerId}`,
+      phone: o.customer.phone ?? "",
+      email: o.customer.email ?? "",
+      address: formatAddress(o.customer.defaultAddress),
+      marketingStatus: o.customer.emailMarketingConsent?.marketingState ?? "",
+    });
+  }
+
+  const totalPrice = Number(o.totalPriceSet.shopMoney.amount);
+  const currency = o.totalPriceSet.shopMoney.currencyCode;
+
+  await upsertOrder({
+    shopifyOrderId: orderId,
+    clientId,
+    name: o.name ?? `#${orderId}`,
+    totalPrice,
+    currency,
+    channel: classifyChannel(o.sourceName, null),
+    occurredAt: new Date(o.createdAt),
+  });
+
+  if (clientId) {
+    await logOrderNote(
+      clientId,
+      `Поръчка ${o.name ?? `#${orderId}`}`,
+      `Обща сума: ${totalPrice.toFixed(2)} ${currency}`,
+      `note-order-${orderId}`
+    );
+  }
+
+  return { hadCustomer: Boolean(clientId) };
+}
+
 async function main() {
   let cursor: string | undefined;
   let ordersImported = 0;
@@ -101,51 +144,10 @@ async function main() {
     const data = await shopifyGraphql<OrdersResult>(QUERY, { cursor });
     const { edges, pageInfo } = data.orders;
 
-    for (const edge of edges) {
-      const o = edge.node;
-      const orderId = shopifyLegacyId(o.id);
-      let clientId: string | null = null;
-
-      if (o.customer) {
-        const customerId = shopifyLegacyId(o.customer.id);
-        const name = [o.customer.firstName, o.customer.lastName].filter(Boolean).join(" ").trim();
-        clientId = await upsertShopifyCustomer({
-          shopifyCustomerId: customerId,
-          company: o.customer.defaultAddress?.company || name || o.customer.email || `Клиент ${customerId}`,
-          contact: name || o.customer.email || `Клиент ${customerId}`,
-          phone: o.customer.phone ?? "",
-          email: o.customer.email ?? "",
-          address: formatAddress(o.customer.defaultAddress),
-          marketingStatus: o.customer.emailMarketingConsent?.marketingState ?? "",
-        });
-        customersImported++;
-      }
-
-      const totalPrice = Number(o.totalPriceSet.shopMoney.amount);
-      const currency = o.totalPriceSet.shopMoney.currencyCode;
-
-      await upsertOrder({
-        shopifyOrderId: orderId,
-        clientId,
-        name: o.name ?? `#${orderId}`,
-        totalPrice,
-        currency,
-        channel: classifyChannel(o.sourceName, null),
-        occurredAt: new Date(o.createdAt),
-      });
-
-      if (clientId) {
-        await logOrderNote(
-          clientId,
-          `Поръчка ${o.name ?? `#${orderId}`}`,
-          `Обща сума: ${totalPrice.toFixed(2)} ${currency}`,
-          `note-order-${orderId}`
-        );
-      }
-
-      ordersImported++;
-      cursor = edge.cursor;
-    }
+    const results = await Promise.all(edges.map((edge) => processOrder(edge.node)));
+    ordersImported += results.length;
+    customersImported += results.filter((r) => r.hadCustomer).length;
+    cursor = edges[edges.length - 1]?.cursor ?? cursor;
 
     if (!pageInfo.hasNextPage) break;
   }
