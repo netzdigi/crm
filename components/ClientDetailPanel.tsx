@@ -1,9 +1,21 @@
 "use client";
 
 import { useEffect } from "react";
-import { X, Phone, Mail, MapPin, Building2, StickyNote, RefreshCw, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import {
+  X,
+  Phone,
+  Mail,
+  MapPin,
+  Building2,
+  StickyNote,
+  RefreshCw,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Package,
+} from "lucide-react";
 import { Badge } from "@/components/Badge";
 import type { Client, ClientCommunication, ClientStatus, CommunicationChannel } from "@/lib/types";
+import type { ClientOrderSummary } from "@/lib/db/queries";
 
 const statusTone: Record<ClientStatus, "positive" | "accent" | "neutral"> = {
   Активен: "positive",
@@ -29,11 +41,13 @@ const channelIcon: Record<CommunicationChannel, typeof Mail> = {
 export function ClientDetailPanel({
   client,
   thread,
+  orders,
   onClose,
   onNotesChange,
 }: {
   client: Client;
   thread: ClientCommunication[];
+  orders: ClientOrderSummary[];
   onClose: () => void;
   onNotesChange: (notes: string) => void;
 }) {
@@ -138,6 +152,53 @@ export function ClientDetailPanel({
           </div>
 
           <div className="flex flex-col overflow-y-auto p-6">
+            <div className="mb-4">
+              <div className="mb-2 text-[14.5px] font-semibold">Поръчки</div>
+              {orders.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-[12.5px] text-ink-soft">
+                  Все още няма поръчки от този клиент.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2.5">
+                  {orders.map((order) => (
+                    <div key={order.id} className="rounded-lg border border-border bg-paper px-3.5 py-3">
+                      <div className="mb-2 flex items-center justify-between gap-2 text-[12.5px]">
+                        <span className="font-mono font-semibold text-ink">{order.number}</span>
+                        <span className="text-ink-mute">{order.time}</span>
+                        <span className="font-medium tabular">{order.amount}</span>
+                      </div>
+                      {order.items.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {order.items.map((item, i) => (
+                            <div
+                              key={i}
+                              className="flex items-center gap-1.5 rounded-[6px] border border-border bg-surface px-1.5 py-1"
+                            >
+                              {item.imageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={item.imageUrl}
+                                  alt={item.title}
+                                  className="h-7 w-7 flex-shrink-0 rounded-[4px] object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[4px] bg-active text-ink-mute">
+                                  <Package size={12} />
+                                </div>
+                              )}
+                              <span className="text-[11px] text-ink-soft">
+                                {item.quantity}× {item.title}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <div className="text-[14.5px] font-semibold">Комуникация</div>
               <span className="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-accent">

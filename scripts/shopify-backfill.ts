@@ -12,7 +12,9 @@ if (missing.length > 0) {
 }
 
 const { shopifyGraphql } = await import("../lib/shopify/admin");
-const { logOrderNote, upsertOrder, upsertShopifyCustomer } = await import("../lib/db/queries");
+const { logOrderNote, upsertOrder, upsertOrderLineItems, upsertShopifyCustomer } = await import(
+  "../lib/db/queries"
+);
 const { classifyChannel } = await import("../lib/shopify/channel");
 
 // Iterates orders (not customers), so a single pass both only ever syncs
@@ -29,6 +31,16 @@ const QUERY = `
           createdAt
           sourceName
           totalPriceSet { shopMoney { amount currencyCode } }
+          lineItems(first: 20) {
+            edges {
+              node {
+                title
+                quantity
+                originalUnitPriceSet { shopMoney { amount } }
+                image { url }
+              }
+            }
+          }
           customer {
             id
             email
@@ -65,12 +77,20 @@ interface CustomerNode {
   emailMarketingConsent: { marketingState: string | null } | null;
 }
 
+interface LineItemNode {
+  title: string;
+  quantity: number;
+  originalUnitPriceSet: { shopMoney: { amount: string } };
+  image: { url: string } | null;
+}
+
 interface OrderNode {
   id: string;
   name: string | null;
   createdAt: string;
   sourceName: string | null;
   totalPriceSet: { shopMoney: { amount: string; currencyCode: string } };
+  lineItems: { edges: { node: LineItemNode }[] };
   customer: CustomerNode | null;
 }
 
@@ -122,6 +142,16 @@ async function processOrder(o: OrderNode): Promise<{ hadCustomer: boolean }> {
     channel: classifyChannel(o.sourceName, null),
     occurredAt: new Date(o.createdAt),
   });
+
+  await upsertOrderLineItems(
+    orderId,
+    o.lineItems.edges.map((e) => ({
+      title: e.node.title,
+      quantity: e.node.quantity,
+      price: Number(e.node.originalUnitPriceSet.shopMoney.amount),
+      imageUrl: e.node.image?.url ?? "",
+    }))
+  );
 
   if (clientId) {
     await logOrderNote(

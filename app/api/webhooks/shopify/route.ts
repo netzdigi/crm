@@ -5,9 +5,11 @@ import {
   findClientByShopifyCustomerId,
   logOrderNote,
   upsertOrder,
+  upsertOrderLineItems,
   upsertShopifyCustomer,
 } from "@/lib/db/queries";
 import { classifyChannel } from "@/lib/shopify/channel";
+import { shopifyGraphql } from "@/lib/shopify/admin";
 
 // Webhook subscriptions created through the Admin API (see
 // scripts/shopify-register-webhooks.ts) are signed by Shopify with the
@@ -87,6 +89,62 @@ async function handleCustomerPayload(customer: ShopifyCustomer, onlyUpdateExisti
   );
 }
 
+const LINE_ITEMS_QUERY = `
+  query orderLineItems($id: ID!) {
+    order(id: $id) {
+      lineItems(first: 20) {
+        edges {
+          node {
+            title
+            quantity
+            originalUnitPriceSet { shopMoney { amount } }
+            image { url }
+          }
+        }
+      }
+    }
+  }
+`;
+
+interface LineItemsResult {
+  order: {
+    lineItems: {
+      edges: {
+        node: {
+          title: string;
+          quantity: number;
+          originalUnitPriceSet: { shopMoney: { amount: string } };
+          image: { url: string } | null;
+        };
+      }[];
+    };
+  } | null;
+}
+
+// The REST order payload doesn't include product images, so fetch line
+// items via the Admin API GraphQL instead. Non-fatal: a failure here
+// (e.g. missing scope) shouldn't fail the whole webhook and trigger a
+// Shopify redelivery, since the order/customer sync already succeeded.
+async function syncOrderLineItems(orderId: string) {
+  try {
+    const data = await shopifyGraphql<LineItemsResult>(LINE_ITEMS_QUERY, {
+      id: `gid://shopify/Order/${orderId}`,
+    });
+    const edges = data.order?.lineItems.edges ?? [];
+    await upsertOrderLineItems(
+      orderId,
+      edges.map((e) => ({
+        title: e.node.title,
+        quantity: e.node.quantity,
+        price: Number(e.node.originalUnitPriceSet.shopMoney.amount),
+        imageUrl: e.node.image?.url ?? "",
+      }))
+    );
+  } catch (err) {
+    console.error(`Failed to sync line items for order ${orderId}:`, err);
+  }
+}
+
 async function handleOrderPayload(order: ShopifyOrder) {
   let clientId: string | null = null;
 
@@ -110,6 +168,8 @@ async function handleOrderPayload(order: ShopifyOrder) {
     channel: classifyChannel(order.source_name, order.referring_site),
     occurredAt: order.created_at ? new Date(order.created_at) : new Date(),
   });
+
+  await syncOrderLineItems(String(order.id));
 
   if (!clientId) return;
 
