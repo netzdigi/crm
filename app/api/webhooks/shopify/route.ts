@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import {
   findClientByEmail,
@@ -6,14 +7,19 @@ import {
   upsertShopifyCustomer,
 } from "@/lib/db/queries";
 
-// Receives Shopify's native admin-configured webhooks (Settings > Notifications
-// > Webhooks). Those aren't tied to an app, so Shopify doesn't sign them with
-// an HMAC header — the shared "secret" query param on the webhook URL is the
-// only thing standing between this endpoint and a forged request.
-function isAuthorized(request: NextRequest): boolean {
-  const expected = process.env.SHOPIFY_WEBHOOK_SECRET;
-  if (!expected) return false;
-  return request.nextUrl.searchParams.get("secret") === expected;
+// Webhook subscriptions created through the Admin API (see
+// scripts/shopify-register-webhooks.ts) are signed by Shopify with the
+// custom app's API secret key, so the payload's authenticity can be verified
+// cryptographically instead of trusting a shared URL secret.
+function verifyHmac(rawBody: string, hmacHeader: string | null): boolean {
+  const secret = process.env.SHOPIFY_API_SECRET;
+  if (!secret || !hmacHeader) return false;
+
+  const digest = createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");
+  const expected = Buffer.from(digest, "utf8");
+  const received = Buffer.from(hmacHeader, "utf8");
+  if (expected.length !== received.length) return false;
+  return timingSafeEqual(expected, received);
 }
 
 interface ShopifyCustomer {
@@ -71,14 +77,18 @@ async function handleOrderPayload(order: ShopifyOrder) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  const rawBody = await request.text();
+  const hmacHeader = request.headers.get("x-shopify-hmac-sha256");
+
+  if (!verifyHmac(rawBody, hmacHeader)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const topic = request.headers.get("x-shopify-topic") ?? "";
-  const body = await request.json().catch(() => null);
-
-  if (!body) {
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 

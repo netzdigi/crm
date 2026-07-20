@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "db:push": "drizzle-kit push",
-    "db:seed": "tsx scripts/seed.ts"
+    "db:seed": "tsx scripts/seed.ts",
+    "shopify:register-webhooks": "tsx scripts/shopify-register-webhooks.ts",
+    "shopify:backfill": "tsx scripts/shopify-backfill.ts"
   },
   "dependencies": {
     "@clerk/localizations": "^4.13.4",
