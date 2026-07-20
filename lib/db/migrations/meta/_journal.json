@@ -15,6 +15,13 @@
       "when": 1784578508391,
       "tag": "0001_large_hawkeye",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784579964033,
+      "tag": "0002_lame_mercury",
+      "breakpoints": true
     }
   ]
 }

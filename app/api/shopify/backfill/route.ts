@@ -1,27 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { shopifyGraphql } from "@/lib/shopify/admin";
-import { upsertShopifyCustomer } from "@/lib/db/queries";
+import { logOrderNote, upsertOrder, upsertShopifyCustomer } from "@/lib/db/queries";
+import { classifyChannel } from "@/lib/shopify/channel";
 
 // Same rationale as register-webhooks/route.ts: triggered via browser visit
-// (protected by ?secret=) instead of scripts/shopify-backfill.ts, since this
-// sandbox's network can't reach Shopify or Neon directly.
+// (protected by ?secret=) instead of a CLI script, since this sandbox's
+// network can't reach Shopify or Neon directly.
 //
-// Only customers who have placed at least one order are imported
-// (query: "orders_count:>0") — a plain signup with no purchase doesn't
-// belong in the CRM.
+// Iterates orders (not customers) so a single pass both (a) only ever syncs
+// customers who have actually ordered, and (b) fills the orders table the
+// dashboard's revenue/channel numbers are computed from.
 const QUERY = `
-  query customers($cursor: String) {
-    customers(first: 50, after: $cursor, query: "orders_count:>0") {
+  query orders($cursor: String) {
+    orders(first: 50, after: $cursor) {
       edges {
         cursor
         node {
           id
-          email
-          phone
-          firstName
-          lastName
-          defaultAddress { address1 address2 city zip province country company }
-          emailMarketingConsent { marketingState }
+          name
+          createdAt
+          sourceName
+          totalPriceSet { shopMoney { amount currencyCode } }
+          customer {
+            id
+            email
+            phone
+            firstName
+            lastName
+            defaultAddress { address1 address2 city zip province country company }
+            emailMarketingConsent { marketingState }
+          }
         }
       }
       pageInfo { hasNextPage }
@@ -49,9 +57,18 @@ interface CustomerNode {
   emailMarketingConsent: { marketingState: string | null } | null;
 }
 
-interface CustomersResult {
-  customers: {
-    edges: { cursor: string; node: CustomerNode }[];
+interface OrderNode {
+  id: string;
+  name: string | null;
+  createdAt: string;
+  sourceName: string | null;
+  totalPriceSet: { shopMoney: { amount: string; currencyCode: string } };
+  customer: CustomerNode | null;
+}
+
+interface OrdersResult {
+  orders: {
+    edges: { cursor: string; node: OrderNode }[];
     pageInfo: { hasNextPage: boolean };
   };
 }
@@ -75,31 +92,62 @@ export async function GET(request: NextRequest) {
   }
 
   let cursor: string | undefined;
-  let total = 0;
+  let ordersImported = 0;
+  let customersImported = 0;
 
   for (;;) {
-    const data = await shopifyGraphql<CustomersResult>(QUERY, { cursor });
-    const { edges, pageInfo } = data.customers;
+    const data = await shopifyGraphql<OrdersResult>(QUERY, { cursor });
+    const { edges, pageInfo } = data.orders;
 
     for (const edge of edges) {
-      const c = edge.node;
-      const id = shopifyLegacyId(c.id);
-      const name = [c.firstName, c.lastName].filter(Boolean).join(" ").trim();
-      await upsertShopifyCustomer({
-        shopifyCustomerId: id,
-        company: c.defaultAddress?.company || name || c.email || `Клиент ${id}`,
-        contact: name || c.email || `Клиент ${id}`,
-        phone: c.phone ?? "",
-        email: c.email ?? "",
-        address: formatAddress(c.defaultAddress),
-        marketingStatus: c.emailMarketingConsent?.marketingState ?? "",
+      const o = edge.node;
+      const orderId = shopifyLegacyId(o.id);
+      let clientId: string | null = null;
+
+      if (o.customer) {
+        const customerId = shopifyLegacyId(o.customer.id);
+        const name = [o.customer.firstName, o.customer.lastName].filter(Boolean).join(" ").trim();
+        clientId = await upsertShopifyCustomer({
+          shopifyCustomerId: customerId,
+          company: o.customer.defaultAddress?.company || name || o.customer.email || `Клиент ${customerId}`,
+          contact: name || o.customer.email || `Клиент ${customerId}`,
+          phone: o.customer.phone ?? "",
+          email: o.customer.email ?? "",
+          address: formatAddress(o.customer.defaultAddress),
+          marketingStatus: o.customer.emailMarketingConsent?.marketingState ?? "",
+        });
+        customersImported++;
+      }
+
+      const totalPrice = Number(o.totalPriceSet.shopMoney.amount);
+      const currency = o.totalPriceSet.shopMoney.currencyCode;
+      const occurredAt = new Date(o.createdAt);
+
+      await upsertOrder({
+        shopifyOrderId: orderId,
+        clientId,
+        name: o.name ?? `#${orderId}`,
+        totalPrice,
+        currency,
+        channel: classifyChannel(o.sourceName, null),
+        occurredAt,
       });
-      total++;
+
+      if (clientId) {
+        await logOrderNote(
+          clientId,
+          `Поръчка ${o.name ?? `#${orderId}`}`,
+          `Обща сума: ${totalPrice.toFixed(2)} ${currency}`,
+          `note-order-${orderId}`
+        );
+      }
+
+      ordersImported++;
       cursor = edge.cursor;
     }
 
     if (!pageInfo.hasNextPage) break;
   }
 
-  return NextResponse.json({ imported: total });
+  return NextResponse.json({ ordersImported, customersImported });
 }
