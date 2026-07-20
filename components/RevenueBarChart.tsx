@@ -1,19 +1,17 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowUp } from "lucide-react";
-import { weeklyRevenue } from "@/lib/data";
 
-export function RevenueBarChart() {
+export interface WeeklyRevenueDay {
+  day: string;
+  amount: string;
+  heightPct: number;
+}
+
+export function RevenueBarChart({ weeklyRevenue }: { weeklyRevenue: WeeklyRevenueDay[] }) {
   return (
     <div className="rounded-lg border border-border bg-surface px-6 py-5">
-      <div className="mb-0.5 flex items-center gap-2 text-[14.5px] font-semibold">
-        Нетни приходи
-        <span className="flex items-center gap-1 rounded-full bg-accent-soft px-1.5 py-0.5 text-[11px] font-semibold text-accent">
-          <ArrowUp size={9} strokeWidth={3} />
-          66,9%
-        </span>
-      </div>
+      <div className="mb-0.5 text-[14.5px] font-semibold">Нетни приходи</div>
       <div className="mb-4.5 text-[12.5px] text-ink-soft">
         Дневни нетни приходи, последните 7 дни.
       </div>

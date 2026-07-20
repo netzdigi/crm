@@ -4,8 +4,10 @@ import {
   findClientByEmail,
   findClientByShopifyCustomerId,
   logOrderNote,
+  upsertOrder,
   upsertShopifyCustomer,
 } from "@/lib/db/queries";
+import { classifyChannel } from "@/lib/shopify/channel";
 
 // Webhook subscriptions created through the Admin API (see
 // scripts/shopify-register-webhooks.ts) are signed by Shopify with the
@@ -49,6 +51,9 @@ interface ShopifyOrder {
   currency?: string | null;
   customer?: ShopifyCustomer | null;
   email?: string | null;
+  source_name?: string | null;
+  referring_site?: string | null;
+  created_at?: string | null;
 }
 
 function customerDisplayName(customer: ShopifyCustomer): string {
@@ -92,14 +97,28 @@ async function handleOrderPayload(order: ShopifyOrder) {
     clientId = await findClientByEmail(order.email);
   }
 
+  const totalPrice = order.total_price ? Number(order.total_price) : 0;
+  const currency = order.currency ?? "EUR";
+  const label = order.name ?? `#${order.id}`;
+
+  await upsertOrder({
+    shopifyOrderId: String(order.id),
+    clientId,
+    name: label,
+    totalPrice,
+    currency,
+    channel: classifyChannel(order.source_name, order.referring_site),
+    occurredAt: order.created_at ? new Date(order.created_at) : new Date(),
+  });
+
   if (!clientId) return;
 
-  const price = order.total_price ? `${order.total_price} ${order.currency ?? "EUR"}` : "";
-  const label = order.name ?? `#${order.id}`;
+  const price = order.total_price ? `${order.total_price} ${currency}` : "";
   await logOrderNote(
     clientId,
     `Нова поръчка ${label}`,
-    price ? `Обща сума: ${price}` : "Поръчката е получена от Shopify."
+    price ? `Обща сума: ${price}` : "Поръчката е получена от Shopify.",
+    `note-order-${order.id}`
   );
 }
 

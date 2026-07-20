@@ -2,8 +2,13 @@ import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import { ChannelChart } from "@/components/ChannelChart";
 import { analyticsMetrics, channelPerformance } from "@/lib/data";
+import { getDashboardData } from "@/lib/db/queries";
 
-export default function AnalyticsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AnalyticsPage() {
+  const { channelRevenue } = await getDashboardData();
+
   return (
     <>
       <PageHeader
@@ -18,7 +23,7 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr]">
-        <ChannelChart />
+        <ChannelChart channelRevenue={channelRevenue} />
 
         <div className="rounded-lg border border-border bg-surface px-6 py-5">
           <div className="mb-0.5 text-[14.5px] font-semibold">Представяне по канал</div>
