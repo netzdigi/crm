@@ -39,6 +39,8 @@ export const clients = pgTable("clients", {
   contact: text("contact").notNull().default(""),
   phone: text("phone").notNull().default(""),
   email: text("email").notNull().default(""),
+  address: text("address").notNull().default(""),
+  marketingStatus: text("marketing_status").notNull().default(""),
   status: clientStatusEnum("status").notNull().default("Нов"),
   notes: text("notes").notNull().default(""),
   source: clientSourceEnum("source").notNull().default("manual"),

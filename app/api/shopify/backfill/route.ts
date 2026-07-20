@@ -5,9 +5,13 @@ import { upsertShopifyCustomer } from "@/lib/db/queries";
 // Same rationale as register-webhooks/route.ts: triggered via browser visit
 // (protected by ?secret=) instead of scripts/shopify-backfill.ts, since this
 // sandbox's network can't reach Shopify or Neon directly.
+//
+// Only customers who have placed at least one order are imported
+// (query: "orders_count:>0") — a plain signup with no purchase doesn't
+// belong in the CRM.
 const QUERY = `
   query customers($cursor: String) {
-    customers(first: 50, after: $cursor) {
+    customers(first: 50, after: $cursor, query: "orders_count:>0") {
       edges {
         cursor
         node {
@@ -16,7 +20,8 @@ const QUERY = `
           phone
           firstName
           lastName
-          defaultAddress { company }
+          defaultAddress { address1 address2 city zip province country company }
+          emailMarketingConsent { marketingState }
         }
       }
       pageInfo { hasNextPage }
@@ -24,13 +29,24 @@ const QUERY = `
   }
 `;
 
+interface CustomerAddress {
+  address1: string | null;
+  address2: string | null;
+  city: string | null;
+  zip: string | null;
+  province: string | null;
+  country: string | null;
+  company: string | null;
+}
+
 interface CustomerNode {
   id: string;
   email: string | null;
   phone: string | null;
   firstName: string | null;
   lastName: string | null;
-  defaultAddress: { company: string | null } | null;
+  defaultAddress: CustomerAddress | null;
+  emailMarketingConsent: { marketingState: string | null } | null;
 }
 
 interface CustomersResult {
@@ -42,6 +58,13 @@ interface CustomersResult {
 
 function shopifyLegacyId(gid: string): string {
   return gid.split("/").pop() ?? gid;
+}
+
+function formatAddress(address: CustomerAddress | null): string {
+  if (!address) return "";
+  return [address.address1, address.address2, address.zip, address.city, address.province, address.country]
+    .filter(Boolean)
+    .join(", ");
 }
 
 export async function GET(request: NextRequest) {
@@ -68,6 +91,8 @@ export async function GET(request: NextRequest) {
         contact: name || c.email || `Клиент ${id}`,
         phone: c.phone ?? "",
         email: c.email ?? "",
+        address: formatAddress(c.defaultAddress),
+        marketingStatus: c.emailMarketingConsent?.marketingState ?? "",
       });
       total++;
       cursor = edge.cursor;

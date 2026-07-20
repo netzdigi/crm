@@ -8,6 +8,13 @@
       "when": 1784560553800,
       "tag": "0000_long_zarda",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784578508391,
+      "tag": "0001_large_hawkeye",
+      "breakpoints": true
     }
   ]
 }

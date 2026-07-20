@@ -11,6 +11,8 @@ export interface Client {
   contact: string;
   phone: string;
   email: string;
+  address: string;
+  marketingStatus: string;
   status: ClientStatus;
   boardId: string;
   lastContact: string;
