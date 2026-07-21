@@ -218,6 +218,23 @@ export async function findClientByEmail(email: string) {
   return rows[0]?.id ?? null;
 }
 
+// Mandatory Shopify compliance webhooks (GDPR). redactCustomer removes the
+// client row entirely (cascades to their communications); orders keep the
+// transactional record but lose the clientId link (FK is ON DELETE SET NULL).
+export async function redactCustomerByShopifyId(shopifyCustomerId: string) {
+  const db = getDb();
+  await db.delete(clients).where(eq(clients.shopifyCustomerId, shopifyCustomerId));
+}
+
+// shop/redact: erase all Shopify-sourced customer data for the uninstalled
+// shop. Manually-entered clients (source="manual") are untouched since they
+// aren't Shopify customer data.
+export async function redactAllShopifyData() {
+  const db = getDb();
+  await db.delete(clients).where(eq(clients.source, "shopify"));
+  await db.delete(orders);
+}
+
 // noteId defaults to a fresh id, but callers that might run twice for the
 // same order (e.g. the backfill route) should pass a deterministic one so
 // re-running it doesn't duplicate the note.
