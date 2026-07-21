@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { asc, desc, eq, gte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import { getDb } from "./client";
-import { clientCommunications, clients, orders, pipelineBoards } from "./schema";
+import { clientCommunications, clients, orderLineItems, orders, pipelineBoards } from "./schema";
 import type { Client, ClientCommunication, PipelineBoard } from "@/lib/types";
 import type { StatMetric } from "@/lib/data";
 import { formatRelativeBg } from "@/lib/format";
@@ -18,11 +18,13 @@ export async function getBoards(): Promise<PipelineBoard[]> {
 export async function getClientsWithCommunications(): Promise<{
   clients: Client[];
   communications: Record<string, ClientCommunication[]>;
+  ordersByClient: Record<string, ClientOrderSummary[]>;
 }> {
   const db = getDb();
-  const [clientRows, commRows] = await Promise.all([
+  const [clientRows, commRows, orderRows] = await Promise.all([
     db.select().from(clients).orderBy(asc(clients.createdAt)),
     db.select().from(clientCommunications).orderBy(asc(clientCommunications.occurredAt)),
+    db.select().from(orders).orderBy(desc(orders.occurredAt)),
   ]);
 
   const now = new Date();
@@ -56,7 +58,34 @@ export async function getClientsWithCommunications(): Promise<{
     list.reverse();
   }
 
-  return { clients: mappedClients, communications };
+  const clientOrderRows = orderRows.filter((o) => o.clientId);
+  const itemRows =
+    clientOrderRows.length > 0
+      ? await db
+          .select()
+          .from(orderLineItems)
+          .where(inArray(orderLineItems.orderId, clientOrderRows.map((o) => o.id)))
+      : [];
+  const itemsByOrder = new Map<string, ClientOrderSummary["items"]>();
+  for (const item of itemRows) {
+    const list = itemsByOrder.get(item.orderId) ?? [];
+    list.push({ title: item.title, quantity: item.quantity, imageUrl: item.imageUrl });
+    itemsByOrder.set(item.orderId, list);
+  }
+
+  const ordersByClient: Record<string, ClientOrderSummary[]> = {};
+  for (const o of clientOrderRows) {
+    const summary: ClientOrderSummary = {
+      id: o.id,
+      number: o.name || `#${o.id}`,
+      amount: formatMoney(Number(o.totalPrice), o.currency),
+      time: formatRelativeBg(o.occurredAt, now),
+      items: itemsByOrder.get(o.id) ?? [],
+    };
+    (ordersByClient[o.clientId as string] ??= []).push(summary);
+  }
+
+  return { clients: mappedClients, communications, ordersByClient };
 }
 
 export async function moveClientToBoard(id: string, boardId: string) {
@@ -243,6 +272,40 @@ export async function upsertOrder(payload: OrderPayload) {
     });
 }
 
+export interface OrderLineItemPayload {
+  title: string;
+  quantity: number;
+  price: number;
+  imageUrl: string;
+}
+
+// Always replaces an order's line items wholesale (delete then reinsert)
+// rather than diffing — simpler, and safe to re-run for the same order
+// since the whole payload comes fresh from Shopify each time.
+export async function upsertOrderLineItems(orderId: string, items: OrderLineItemPayload[]) {
+  const db = getDb();
+  await db.delete(orderLineItems).where(eq(orderLineItems.orderId, orderId));
+  if (items.length === 0) return;
+  await db.insert(orderLineItems).values(
+    items.map((item, i) => ({
+      id: `${orderId}-${i}`,
+      orderId,
+      title: item.title,
+      quantity: item.quantity,
+      price: item.price.toFixed(2),
+      imageUrl: item.imageUrl,
+    }))
+  );
+}
+
+export interface ClientOrderSummary {
+  id: string;
+  number: string;
+  amount: string;
+  time: string;
+  items: { title: string; quantity: number; imageUrl: string }[];
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DAY_LABELS_BG = ["Нед", "Пон", "Вт", "Ср", "Чет", "Пет", "Съб"];
 
@@ -299,41 +362,69 @@ interface Bucket {
 // For up to 14 days, one bucket per calendar day (weekday label). Beyond
 // that, ~10 evenly-sized buckets with a short date label — the bar chart
 // has no room for 90 individual daily bars.
-function buildBuckets(now: Date, days: number): Bucket[] {
-  if (days <= 14) {
-    return Array.from({ length: days }, (_, i) => {
-      const start = new Date(now.getTime() - (days - 1 - i) * DAY_MS);
-      return { label: DAY_LABELS_BG[start.getDay()], start, end: new Date(start.getTime() + DAY_MS) };
+function buildBuckets(start: Date, end: Date): Bucket[] {
+  const totalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / DAY_MS));
+
+  if (totalDays <= 14) {
+    return Array.from({ length: totalDays }, (_, i) => {
+      const bStart = new Date(start.getTime() + i * DAY_MS);
+      return { label: DAY_LABELS_BG[bStart.getDay()], start: bStart, end: new Date(bStart.getTime() + DAY_MS) };
     });
   }
 
   const bucketCount = 10;
-  const bucketMs = (days * DAY_MS) / bucketCount;
-  const rangeStart = new Date(now.getTime() - days * DAY_MS);
+  const bucketMs = (end.getTime() - start.getTime()) / bucketCount;
   return Array.from({ length: bucketCount }, (_, i) => {
-    const start = new Date(rangeStart.getTime() + i * bucketMs);
-    const end = new Date(rangeStart.getTime() + (i + 1) * bucketMs);
-    return { label: `${start.getDate()}.${start.getMonth() + 1}`, start, end };
+    const bStart = new Date(start.getTime() + i * bucketMs);
+    const bEnd = new Date(start.getTime() + (i + 1) * bucketMs);
+    return { label: `${bStart.getDate()}.${bStart.getMonth() + 1}`, start: bStart, end: bEnd };
   });
+}
+
+function formatDateBg(d: Date): string {
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+}
+
+export interface DashboardRange {
+  days?: number;
+  from?: Date;
+  to?: Date;
 }
 
 // Everything the dashboard homepage needs, computed from real Shopify
 // orders/clients instead of static mock data. Degrades gracefully to
-// zeros/empty lists before any orders have synced. `days` is the current
-// comparison period; the same length immediately before it is used as the
-// "previous period" for trend percentages.
-export async function getDashboardData(days = 7): Promise<DashboardData> {
+// zeros/empty lists before any orders have synced. Accepts either a preset
+// day count or an explicit {from, to} range; the same-length period
+// immediately before it is used as the "previous period" for trend
+// percentages.
+export async function getDashboardData(range: DashboardRange = {}): Promise<DashboardData> {
   const db = getDb();
   const now = new Date();
-  const since = new Date(now.getTime() - days * 2 * DAY_MS);
-  const currentStart = new Date(now.getTime() - days * DAY_MS);
+
+  let currentStart: Date;
+  let currentEnd: Date;
+  let periodLabel: string;
+
+  if (range.from && range.to) {
+    currentStart = range.from;
+    currentEnd = new Date(range.to.getTime() + DAY_MS);
+    periodLabel = `${formatDateBg(range.from)} – ${formatDateBg(range.to)}`;
+  } else {
+    const days = range.days ?? 7;
+    currentStart = new Date(now.getTime() - days * DAY_MS);
+    currentEnd = now;
+    periodLabel = `${days} дни`;
+  }
+
+  const periodMs = currentEnd.getTime() - currentStart.getTime();
+  const previousStart = new Date(currentStart.getTime() - periodMs);
 
   const [orderRows, recentClientRows, recentOrderRows] = await Promise.all([
-    db.select().from(orders).where(gte(orders.occurredAt, since)).orderBy(asc(orders.occurredAt)),
+    db.select().from(orders).where(gte(orders.occurredAt, previousStart)).orderBy(asc(orders.occurredAt)),
     db
       .select({ id: clients.id, company: clients.company, createdAt: clients.createdAt })
       .from(clients)
-      .where(gte(clients.createdAt, since)),
+      .where(gte(clients.createdAt, previousStart)),
     db
       .select({
         number: orders.name,
@@ -344,13 +435,16 @@ export async function getDashboardData(days = 7): Promise<DashboardData> {
       })
       .from(orders)
       .leftJoin(clients, eq(orders.clientId, clients.id))
+      .where(and(gte(orders.occurredAt, currentStart), lt(orders.occurredAt, currentEnd)))
       .orderBy(desc(orders.occurredAt))
       .limit(5),
   ]);
 
-  const currentOrders = orderRows.filter((o) => o.occurredAt >= currentStart);
+  const currentOrders = orderRows.filter((o) => o.occurredAt >= currentStart && o.occurredAt < currentEnd);
   const previousOrders = orderRows.filter((o) => o.occurredAt < currentStart);
-  const currentClients = recentClientRows.filter((c) => c.createdAt >= currentStart);
+  const currentClients = recentClientRows.filter(
+    (c) => c.createdAt >= currentStart && c.createdAt < currentEnd
+  );
   const previousClients = recentClientRows.filter((c) => c.createdAt < currentStart);
 
   const sumRevenue = (rows: typeof orderRows) =>
@@ -365,7 +459,7 @@ export async function getDashboardData(days = 7): Promise<DashboardData> {
   const currentNewCustomers = currentClients.length;
   const previousNewCustomers = previousClients.length;
 
-  const buckets = buildBuckets(now, days);
+  const buckets = buildBuckets(currentStart, currentEnd);
   const inBucket = (d: Date, b: Bucket) => d >= b.start && d < b.end;
 
   const revenueSeries = buckets.map((b) =>
@@ -384,7 +478,6 @@ export async function getDashboardData(days = 7): Promise<DashboardData> {
     heightPct: Math.round((revenueSeries[i] / maxBucketRevenue) * 100),
   }));
 
-  const periodLabel = `${days} дни`;
   const revenueTrend = pctChange(currentRevenue, previousRevenue);
   const ordersTrend = pctChange(currentOrderCount, previousOrderCount);
   const customersTrend = pctChange(currentNewCustomers, previousNewCustomers);

@@ -22,6 +22,13 @@
       "when": 1784579964033,
       "tag": "0002_lame_mercury",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784582051852,
+      "tag": "0003_flippant_iron_fist",
+      "breakpoints": true
     }
   ]
 }

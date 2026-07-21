@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { shopifyGraphql } from "@/lib/shopify/admin";
-import { logOrderNote, upsertOrder, upsertShopifyCustomer } from "@/lib/db/queries";
+import { logOrderNote, upsertOrder, upsertOrderLineItems, upsertShopifyCustomer } from "@/lib/db/queries";
 import { classifyChannel } from "@/lib/shopify/channel";
 
 // Same rationale as register-webhooks/route.ts: triggered via browser visit
@@ -27,6 +27,16 @@ const QUERY = `
           createdAt
           sourceName
           totalPriceSet { shopMoney { amount currencyCode } }
+          lineItems(first: 20) {
+            edges {
+              node {
+                title
+                quantity
+                originalUnitPriceSet { shopMoney { amount } }
+                image { url }
+              }
+            }
+          }
           customer {
             id
             email
@@ -63,12 +73,20 @@ interface CustomerNode {
   emailMarketingConsent: { marketingState: string | null } | null;
 }
 
+interface LineItemNode {
+  title: string;
+  quantity: number;
+  originalUnitPriceSet: { shopMoney: { amount: string } };
+  image: { url: string } | null;
+}
+
 interface OrderNode {
   id: string;
   name: string | null;
   createdAt: string;
   sourceName: string | null;
   totalPriceSet: { shopMoney: { amount: string; currencyCode: string } };
+  lineItems: { edges: { node: LineItemNode }[] };
   customer: CustomerNode | null;
 }
 
@@ -121,6 +139,16 @@ async function processOrder(o: OrderNode): Promise<{ ok: boolean; hadCustomer: b
       channel: classifyChannel(o.sourceName, null),
       occurredAt: new Date(o.createdAt),
     });
+
+    await upsertOrderLineItems(
+      orderId,
+      o.lineItems.edges.map((e) => ({
+        title: e.node.title,
+        quantity: e.node.quantity,
+        price: Number(e.node.originalUnitPriceSet.shopMoney.amount),
+        imageUrl: e.node.image?.url ?? "",
+      }))
+    );
 
     if (clientId) {
       await logOrderNote(

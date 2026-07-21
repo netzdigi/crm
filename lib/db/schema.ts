@@ -1,4 +1,5 @@
 import {
+  integer,
   numeric,
   pgEnum,
   pgTable,
@@ -59,6 +60,19 @@ export const orders = pgTable("orders", {
   currency: text("currency").notNull().default("EUR"),
   channel: text("channel").notNull().default(""),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Line items for an order — what was actually bought, shown in the client
+// detail panel alongside a product image.
+export const orderLineItems = pgTable("order_line_items", {
+  id: text("id").primaryKey(),
+  orderId: text("order_id")
+    .notNull()
+    .references(() => orders.id, { onDelete: "cascade" }),
+  title: text("title").notNull().default(""),
+  quantity: integer("quantity").notNull().default(1),
+  price: numeric("price", { precision: 12, scale: 2 }).notNull().default("0"),
+  imageUrl: text("image_url").notNull().default(""),
 });
 
 export const clientCommunications = pgTable("client_communications", {

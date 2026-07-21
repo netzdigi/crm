@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { GripVertical, Pencil, Plus, Check, X as XIcon } from "lucide-react";
 import type { Client, ClientCommunication, ClientStatus, PipelineBoard } from "@/lib/types";
+import type { ClientOrderSummary } from "@/lib/db/queries";
 import { Badge } from "@/components/Badge";
 import { ClientDetailPanel } from "@/components/ClientDetailPanel";
 import {
@@ -33,10 +34,12 @@ export function ClientsKanban({
   initialBoards,
   initialClients,
   communications,
+  ordersByClient,
 }: {
   initialBoards: PipelineBoard[];
   initialClients: Client[];
   communications: Record<string, ClientCommunication[]>;
+  ordersByClient: Record<string, ClientOrderSummary[]>;
 }) {
   const [boards, setBoards] = useState<PipelineBoard[]>(initialBoards);
   const [clients, setClients] = useState<Client[]>(initialClients);
@@ -284,6 +287,7 @@ export function ClientsKanban({
         <ClientDetailPanel
           client={openClient}
           thread={communications[openClient.id] ?? []}
+          orders={ordersByClient[openClient.id] ?? []}
           onClose={() => setOpenClientId(null)}
           onNotesChange={(notes) => updateNotes(openClient.id, notes)}
         />

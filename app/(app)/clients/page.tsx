@@ -5,7 +5,7 @@ import { getBoards, getClientsWithCommunications } from "@/lib/db/queries";
 export const dynamic = "force-dynamic";
 
 export default async function ClientsPage() {
-  const [boards, { clients, communications }] = await Promise.all([
+  const [boards, { clients, communications, ordersByClient }] = await Promise.all([
     getBoards(),
     getClientsWithCommunications(),
   ]);
@@ -20,6 +20,7 @@ export default async function ClientsPage() {
         initialBoards={boards}
         initialClients={clients}
         communications={communications}
+        ordersByClient={ordersByClient}
       />
     </>
   );
