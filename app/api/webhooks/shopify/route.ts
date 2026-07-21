@@ -4,6 +4,8 @@ import {
   findClientByEmail,
   findClientByShopifyCustomerId,
   logOrderNote,
+  redactAllShopifyData,
+  redactCustomerByShopifyId,
   upsertOrder,
   upsertOrderLineItems,
   upsertShopifyCustomer,
@@ -199,7 +201,17 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    if (topic.startsWith("customers/")) {
+    if (topic === "customers/data_request") {
+      // We don't have an automated export pipeline; Shopify just requires a
+      // 200 response acknowledging receipt. Logged so the request can be
+      // fulfilled manually within Shopify's required window.
+      console.log("GDPR data request received:", body);
+    } else if (topic === "customers/redact") {
+      const customerId = (body as { customer?: { id?: number | string } }).customer?.id;
+      if (customerId != null) await redactCustomerByShopifyId(String(customerId));
+    } else if (topic === "shop/redact") {
+      await redactAllShopifyData();
+    } else if (topic.startsWith("customers/")) {
       await handleCustomerPayload(body as ShopifyCustomer, true);
     } else if (topic.startsWith("orders/")) {
       await handleOrderPayload(body as ShopifyOrder);
